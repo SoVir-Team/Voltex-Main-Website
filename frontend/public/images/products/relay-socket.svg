@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" role="img">
+
+<defs>
+  <radialGradient id="bg" cx="50%" cy="38%" r="75%"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e6ecf4"/></radialGradient>
+  <linearGradient id="light" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f6f9"/><stop offset="1" stop-color="#d5dbe3"/></linearGradient>
+  <linearGradient id="lightSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#c3cad4"/><stop offset="1" stop-color="#aeb6c2"/></linearGradient>
+  <linearGradient id="dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b4452"/><stop offset="1" stop-color="#1f2630"/></linearGradient>
+  <linearGradient id="darkSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#171c24"/><stop offset="1" stop-color="#0f1319"/></linearGradient>
+  <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef1f5"/><stop offset=".45" stop-color="#c9d0d9"/><stop offset=".55" stop-color="#b7c0cc"/><stop offset="1" stop-color="#dfe4ea"/></linearGradient>
+  <linearGradient id="metalV" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#dfe4ea"/><stop offset=".45" stop-color="#b9c2cd"/><stop offset=".6" stop-color="#eef1f5"/><stop offset="1" stop-color="#c3cbd5"/></linearGradient>
+  <linearGradient id="screen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1d4ed8"/><stop offset="1" stop-color="#0b2a6b"/></linearGradient>
+  <linearGradient id="blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#1d4ed8"/></linearGradient>
+  <linearGradient id="cableG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#64748b"/><stop offset="1" stop-color="#334155"/></linearGradient>
+  <linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22a35a"/><stop offset="1" stop-color="#157a41"/></linearGradient>
+  <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#0f172a" flood-opacity=".16"/></filter>
+</defs>
+<rect width="480" height="360" fill="url(#bg)"/>
+<ellipse cx="240" cy="300" rx="120" ry="14" fill="#0f172a" opacity=".10"/>
+<g filter="url(#soft)">
+    <path d="M150 112h180l14 -12v152l-14 12H150z" fill="#11161d"/>
+    <rect x="150" y="112" width="180" height="152" rx="6" fill="url(#dark)"/>
+    <rect x="150" y="112" width="180" height="34" fill="#2b3340"/><circle cx="172" cy="129" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M169.4 129h5.2" stroke="#4b5563" stroke-width="1.3"/><circle cx="217" cy="129" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M214.4 129h5.2" stroke="#4b5563" stroke-width="1.3"/><circle cx="262" cy="129" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M259.4 129h5.2" stroke="#4b5563" stroke-width="1.3"/><circle cx="307" cy="129" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M304.4 129h5.2" stroke="#4b5563" stroke-width="1.3"/>
+    <rect x="150" y="230" width="180" height="34" fill="#2b3340"/><circle cx="172" cy="247" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M169.4 247h5.2" stroke="#4b5563" stroke-width="1.3"/><circle cx="217" cy="247" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M214.4 247h5.2" stroke="#4b5563" stroke-width="1.3"/><circle cx="262" cy="247" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M259.4 247h5.2" stroke="#4b5563" stroke-width="1.3"/><circle cx="307" cy="247" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M304.4 247h5.2" stroke="#4b5563" stroke-width="1.3"/>
+    <rect x="196" y="156" width="88" height="66" rx="4" fill="#0f141b" stroke="#475569"/>
+    <rect x="208" y="168" width="6" height="16" rx="1" fill="#94a3b8"/><rect x="226" y="168" width="6" height="16" rx="1" fill="#94a3b8"/><rect x="244" y="168" width="6" height="16" rx="1" fill="#94a3b8"/><rect x="262" y="168" width="6" height="16" rx="1" fill="#94a3b8"/><rect x="208" y="196" width="6" height="16" rx="1" fill="#94a3b8"/><rect x="226" y="196" width="6" height="16" rx="1" fill="#94a3b8"/><rect x="244" y="196" width="6" height="16" rx="1" fill="#94a3b8"/><rect x="262" y="196" width="6" height="16" rx="1" fill="#94a3b8"/>
+    <rect x="166" y="270" width="148" height="8" rx="2" fill="#94a3b8"/>
+  </g>
+</svg>

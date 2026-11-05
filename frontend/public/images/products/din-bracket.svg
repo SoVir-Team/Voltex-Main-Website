@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" role="img">
+
+<defs>
+  <radialGradient id="bg" cx="50%" cy="38%" r="75%"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e6ecf4"/></radialGradient>
+  <linearGradient id="light" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f6f9"/><stop offset="1" stop-color="#d5dbe3"/></linearGradient>
+  <linearGradient id="lightSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#c3cad4"/><stop offset="1" stop-color="#aeb6c2"/></linearGradient>
+  <linearGradient id="dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b4452"/><stop offset="1" stop-color="#1f2630"/></linearGradient>
+  <linearGradient id="darkSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#171c24"/><stop offset="1" stop-color="#0f1319"/></linearGradient>
+  <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef1f5"/><stop offset=".45" stop-color="#c9d0d9"/><stop offset=".55" stop-color="#b7c0cc"/><stop offset="1" stop-color="#dfe4ea"/></linearGradient>
+  <linearGradient id="metalV" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#dfe4ea"/><stop offset=".45" stop-color="#b9c2cd"/><stop offset=".6" stop-color="#eef1f5"/><stop offset="1" stop-color="#c3cbd5"/></linearGradient>
+  <linearGradient id="screen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1d4ed8"/><stop offset="1" stop-color="#0b2a6b"/></linearGradient>
+  <linearGradient id="blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#1d4ed8"/></linearGradient>
+  <linearGradient id="cableG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#64748b"/><stop offset="1" stop-color="#334155"/></linearGradient>
+  <linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22a35a"/><stop offset="1" stop-color="#157a41"/></linearGradient>
+  <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#0f172a" flood-opacity=".16"/></filter>
+</defs>
+<rect width="480" height="360" fill="url(#bg)"/>
+<ellipse cx="240" cy="300" rx="130" ry="14" fill="#0f172a" opacity=".10"/>
+<g filter="url(#soft)">
+    <path d="M140 110h200v24H164v120h-24z" fill="url(#metal)" stroke="#97a1ae"/>
+    <path d="M140 110l20 -16h200l-20 16z" fill="#e9edf2" stroke="#97a1ae"/>
+    <path d="M340 110l20 -16v24l-20 16z" fill="#aab3bf"/>
+    <rect x="186" y="150" width="168" height="34" rx="3" fill="url(#metalV)" stroke="#97a1ae"/>
+    <path d="M186 184v14h168v-14" fill="none" stroke="#97a1ae" stroke-width="3"/>
+    <ellipse cx="212" cy="122" rx="7" ry="4" fill="#64748b"/><ellipse cx="250" cy="122" rx="7" ry="4" fill="#64748b"/><ellipse cx="288" cy="122" rx="7" ry="4" fill="#64748b"/><ellipse cx="326" cy="122" rx="7" ry="4" fill="#64748b"/>
+    <circle cx="152" cy="168" r="6" fill="#64748b"/><circle cx="152" cy="226" r="6" fill="#64748b"/>
+    <text x="270" y="172" text-anchor="middle" font-family="Arial" font-size="11" fill="#475569">35 mm DIN rail</text>
+  </g>
+</svg>

@@ -1,0 +1,197 @@
+@import "tailwindcss";
+
+/*
+  VOLTEX design tokens.
+  Colours come from the logo: bolt blue #2BA9DA (facet #299ED0) and wordmark navy #292957, on a white ground.
+  Bolt blue is 2.7:1 on white, so it is used for brand shapes and large fields only; text links use --color-signal
+  (AA on white) and buttons are navy with white text.
+*/
+@theme {
+  --color-ground: #ffffff;
+  --color-surface: #f3f6fb;
+  --color-surface-2: #e6edf6;
+  --color-ink: #292957;
+  --color-ink-deep: #1d1d40;
+  --color-muted: #4d5175;
+  --color-bolt: #2ba9da;
+  --color-bolt-deep: #299ed0;
+  --color-signal: #0b6c9b;
+  --color-on-ink: #ffffff;
+  --color-on-ink-muted: #c9cbe3;
+  --color-success: #127a3a;
+  --color-warning: #9a5600;
+  --color-danger: #b4232a;
+
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+
+  /* Five type steps. Monument and poster sizes are fluid. */
+  --text-small: 0.875rem;
+  --text-body: 1.0625rem;
+  --text-lead: 1.375rem;
+  --text-heading: clamp(1.75rem, 1.2rem + 1.6vw, 2.5rem);
+  --text-statement: clamp(2.5rem, 1.2rem + 4.4vw, 4.25rem);
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    overflow-x: clip;
+    background: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: 1.55;
+    font-feature-settings: "kern", "liga";
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4 {
+    text-wrap: balance;
+    letter-spacing: -0.02em;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  ::selection {
+    background: var(--color-bolt);
+    color: var(--color-ink-deep);
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-bolt-deep);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* One page frame: equal outer margins at every width. */
+  .frame {
+    width: 100%;
+    margin-inline: auto;
+    padding-inline: clamp(1.25rem, 3vw, 2.5rem);
+    max-width: 96rem;
+  }
+  .grid-12 {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: clamp(1rem, 2vw, 2rem);
+  }
+  .section-gap {
+    padding-block: clamp(6rem, 12vw, 11rem);
+  }
+  .link {
+    color: var(--color-signal);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.25em;
+    transition: text-decoration-thickness 150ms var(--ease-out-quart), color 150ms;
+  }
+  .link:hover {
+    text-decoration-thickness: 2px;
+  }
+  .monument {
+    font-weight: 850;
+    font-stretch: 125%;
+    letter-spacing: -0.045em;
+    line-height: 0.86;
+  }
+  .display {
+    font-weight: 800;
+    font-stretch: 112%;
+    letter-spacing: -0.035em;
+    line-height: 0.95;
+  }
+}
+
+/* Signature move: the hero photograph opens like a shutter while the picture inside settles. */
+@keyframes shutter {
+  from { clip-path: inset(100% 0 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@keyframes settle {
+  from { transform: scale(1.12); }
+  to { transform: scale(1); }
+}
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(0.18em); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes push-in {
+  from { transform: scale(1.12); }
+  to { transform: scale(1); }
+}
+@keyframes cue {
+  0%, 100% { transform: translateY(0); opacity: 0.6; }
+  50% { transform: translateY(6px); opacity: 1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .push-in { animation: push-in 14s var(--ease-out-quart) both; }
+  .cue { animation: cue 2s ease-in-out infinite; }
+}
+@keyframes drawer-in {
+  from { transform: translateX(100%); }
+  to { transform: none; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes drift {
+  from { transform: scale(1.06) translateX(-1.5%); }
+  to { transform: scale(1.06) translateX(1.5%); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .shutter {
+    animation: shutter 1.1s var(--ease-out-expo) 0.25s both;
+  }
+  .shutter > img {
+    animation: settle 1.6s var(--ease-out-expo) 0.25s both;
+  }
+  .rise-in {
+    animation: rise-in 0.9s var(--ease-out-expo) both;
+    animation-delay: calc(var(--d, 0) * 70ms);
+  }
+  .drift {
+    animation: drift 18s ease-in-out infinite alternate;
+  }
+}
+
+/* Entrance motion: content is visible without script; motion only travels when allowed. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-reveal] {
+    opacity: 0;
+    transform: translateY(24px);
+    transition:
+      opacity 700ms var(--ease-out-expo),
+      transform 700ms var(--ease-out-expo);
+    transition-delay: calc(var(--reveal-i, 0) * 80ms);
+  }
+  [data-reveal].is-visible {
+    opacity: 1;
+    transform: none;
+  }
+  .no-js [data-reveal] {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

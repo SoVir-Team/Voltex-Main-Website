@@ -1,0 +1,94 @@
+name: Continuous integration
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/production' }}
+
+jobs:
+  validate:
+    name: Validate application
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: voltex
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: voltex_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U voltex -d voltex_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://voltex:ci-only-password@localhost:5432/voltex_test?schema=public
+      TEST_DATABASE_URL: postgresql://voltex:ci-only-password@localhost:5432/voltex_test?schema=public
+      JWT_SECRET: ci-only-secret-with-at-least-thirty-two-characters
+      AUTO_SEED: "false"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate database client
+        run: npm run db:generate
+      - name: Lint
+        run: npm run lint
+      - name: Check types
+        run: npm run typecheck
+      - name: Run tests
+        run: npm test
+      - name: Build production applications
+        run: npm run build
+      - name: Validate deployment configuration
+        run: |
+          bash -n deploy/release.sh
+          cp deploy/.env.example deploy/.env
+          docker compose --env-file deploy/.env -f deploy/compose.yml config --quiet
+      - name: Build production containers
+        run: docker compose --env-file deploy/.env -f deploy/compose.yml build
+
+  deploy:
+    name: Deploy production
+    needs: validate
+    if: github.ref == 'refs/heads/production' && github.event_name != 'pull_request' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy validated commit over SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_HOST" && test -n "$DEPLOY_USER"
+          test -n "$DEPLOY_SSH_KEY" && test -n "$DEPLOY_KNOWN_HOSTS"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/id_ed25519' EXIT
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 "$DEPLOY_USER@$DEPLOY_HOST" "bash -s -- $GITHUB_SHA" < deploy/release.sh

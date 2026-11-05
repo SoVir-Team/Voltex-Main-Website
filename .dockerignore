@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/dist
+.git
+.claude
+.taste-skill
+**/.env
+**/.env.*
+**/coverage
+backend/uploads
+backend/src/generated
+*.log

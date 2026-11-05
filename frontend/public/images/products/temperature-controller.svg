@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" role="img">
+
+<defs>
+  <radialGradient id="bg" cx="50%" cy="38%" r="75%"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e6ecf4"/></radialGradient>
+  <linearGradient id="light" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f6f9"/><stop offset="1" stop-color="#d5dbe3"/></linearGradient>
+  <linearGradient id="lightSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#c3cad4"/><stop offset="1" stop-color="#aeb6c2"/></linearGradient>
+  <linearGradient id="dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b4452"/><stop offset="1" stop-color="#1f2630"/></linearGradient>
+  <linearGradient id="darkSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#171c24"/><stop offset="1" stop-color="#0f1319"/></linearGradient>
+  <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef1f5"/><stop offset=".45" stop-color="#c9d0d9"/><stop offset=".55" stop-color="#b7c0cc"/><stop offset="1" stop-color="#dfe4ea"/></linearGradient>
+  <linearGradient id="metalV" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#dfe4ea"/><stop offset=".45" stop-color="#b9c2cd"/><stop offset=".6" stop-color="#eef1f5"/><stop offset="1" stop-color="#c3cbd5"/></linearGradient>
+  <linearGradient id="screen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1d4ed8"/><stop offset="1" stop-color="#0b2a6b"/></linearGradient>
+  <linearGradient id="blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#1d4ed8"/></linearGradient>
+  <linearGradient id="cableG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#64748b"/><stop offset="1" stop-color="#334155"/></linearGradient>
+  <linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22a35a"/><stop offset="1" stop-color="#157a41"/></linearGradient>
+  <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#0f172a" flood-opacity=".16"/></filter>
+</defs>
+<rect width="480" height="360" fill="url(#bg)"/>
+<ellipse cx="240" cy="300" rx="110" ry="14" fill="#0f172a" opacity=".10"/>
+<g filter="url(#soft)">
+    <path d="M150 70h180l18 -12v204l-18 12H150z" fill="#11161d"/>
+    <rect x="150" y="70" width="180" height="204" rx="8" fill="url(#dark)"/>
+    <rect x="166" y="86" width="148" height="118" rx="4" fill="#05080d"/>
+    <text x="300" y="138" text-anchor="end" font-family="Courier New, monospace" font-size="42" font-weight="700" fill="#ef4444">185.0</text>
+    <text x="300" y="186" text-anchor="end" font-family="Courier New, monospace" font-size="30" font-weight="700" fill="#22c55e">180.0</text>
+    <text x="176" y="106" font-family="Arial" font-size="9" fill="#94a3b8">PV</text><text x="176" y="170" font-family="Arial" font-size="9" fill="#94a3b8">SV</text>
+    <rect x="176" y="192" width="5" height="3.5" rx="1" fill="#f59e0b"/><rect x="190" y="192" width="5" height="3.5" rx="1" fill="#94a3b8"/><rect x="204" y="192" width="5" height="3.5" rx="1" fill="#94a3b8"/><rect x="218" y="192" width="5" height="3.5" rx="1" fill="#94a3b8"/>
+    <rect x="170" y="222" width="28" height="22" rx="4" fill="#cbd5e1"/><rect x="206" y="222" width="28" height="22" rx="4" fill="#cbd5e1"/><rect x="242" y="222" width="28" height="22" rx="4" fill="#cbd5e1"/><rect x="278" y="222" width="28" height="22" rx="4" fill="#cbd5e1"/>
+    <text x="240" y="262" text-anchor="middle" font-family="Arial" font-size="9" fill="#64748b">TEMPERATURE CONTROLLER</text>
+  </g>
+</svg>

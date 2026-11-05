@@ -1,0 +1,157 @@
+// VOLTEX data model. Mirrors the SoVir products package (productModel.js) on PostgreSQL,
+// plus the idea-intake and contact inboxes and admin users.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Top-level product sections on the website: Electronics, Electrical and Industrial products.
+enum Division {
+  electronics
+  electrical
+  industrial
+}
+
+enum DiscountType {
+  none
+  percent
+  amount
+}
+
+enum OrderStatus {
+  pending
+  confirmed
+  dispatched
+  completed
+  cancelled
+}
+
+enum InboxStatus {
+  new
+  read
+  archived
+}
+
+/// Prices are stored as the taxable (pre-GST) unit price in rupees; the GST-inclusive price is derived from taxRate.
+model Product {
+  id                String       @id @default(uuid()) @db.Uuid
+  name              String       @db.VarChar(160)
+  sku               String       @unique @db.VarChar(80)
+  brand             String       @default("") @db.VarChar(80)
+  division          Division     @default(industrial)
+  category          String       @default("Automation Components") @db.VarChar(80)
+  description       String       @default("") @db.VarChar(2000)
+  hsnCode           String       @default("") @db.VarChar(12)
+  unit              String       @default("Nos") @db.VarChar(20)
+  imageUrl          String       @default("") @db.VarChar(500)
+  price             Decimal      @db.Decimal(12, 2)
+  taxRate           Decimal      @default(18) @db.Decimal(5, 2)
+  discountType      DiscountType @default(none)
+  discountValue     Decimal      @default(0) @db.Decimal(12, 2)
+  stock             Int          @default(0)
+  lowStockThreshold Int          @default(3)
+  isActive          Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  orderItems        OrderItem[]
+
+  @@index([isActive, category, name])
+  @@index([division, isActive])
+}
+
+model ProductOrder {
+  id              String      @id @default(uuid()) @db.Uuid
+  orderNumber     String      @unique @db.VarChar(40)
+  customerName    String      @db.VarChar(120)
+  customerEmail   String      @db.VarChar(160)
+  customerPhone   String      @db.VarChar(20)
+  customerCompany String      @default("") @db.VarChar(160)
+  customerGstin   String      @default("") @db.VarChar(15)
+  customerAddress String      @default("") @db.VarChar(500)
+  customerNotes   String      @default("") @db.VarChar(1000)
+  taxableTotal    Decimal     @db.Decimal(14, 2)
+  taxTotal        Decimal     @db.Decimal(14, 2)
+  discountTotal   Decimal     @default(0) @db.Decimal(14, 2)
+  grandTotal      Decimal     @db.Decimal(14, 2)
+  status          OrderStatus @default(pending)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  items           OrderItem[]
+
+  @@index([status, createdAt])
+}
+
+/// A priced snapshot of one cart line at the moment the order was placed.
+model OrderItem {
+  id               String       @id @default(uuid()) @db.Uuid
+  orderId          String       @db.Uuid
+  order            ProductOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId        String?      @db.Uuid
+  product          Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+  sku              String       @db.VarChar(80)
+  name             String       @db.VarChar(160)
+  hsnCode          String       @default("") @db.VarChar(12)
+  quantity         Int
+  unitPrice        Decimal      @db.Decimal(12, 2)
+  listPriceInclTax Decimal      @db.Decimal(12, 2)
+  discountPerUnit  Decimal      @db.Decimal(12, 2)
+  taxRate          Decimal      @db.Decimal(5, 2)
+  taxableAmount    Decimal      @db.Decimal(14, 2)
+  taxAmount        Decimal      @db.Decimal(14, 2)
+  lineTotal        Decimal      @db.Decimal(14, 2)
+
+  @@index([orderId])
+}
+
+model IdeaSubmission {
+  id           String      @id @default(uuid()) @db.Uuid
+  name         String      @db.VarChar(120)
+  email        String      @db.VarChar(160)
+  phone        String      @default("") @db.VarChar(20)
+  company      String      @default("") @db.VarChar(160)
+  stage        String      @db.VarChar(60)
+  services     String[]
+  quantity     String      @default("") @db.VarChar(60)
+  timeline     String      @default("") @db.VarChar(60)
+  description  String      @db.VarChar(4000)
+  ndaRequested Boolean     @default(false)
+  status       InboxStatus @default(new)
+  createdAt    DateTime    @default(now())
+
+  @@index([status, createdAt])
+}
+
+model ContactMessage {
+  id        String      @id @default(uuid()) @db.Uuid
+  name      String      @db.VarChar(120)
+  email     String      @db.VarChar(160)
+  phone     String      @default("") @db.VarChar(20)
+  company   String      @default("") @db.VarChar(160)
+  subject   String      @default("") @db.VarChar(160)
+  message   String      @db.VarChar(4000)
+  status    InboxStatus @default(new)
+  createdAt DateTime    @default(now())
+
+  @@index([status, createdAt])
+}
+
+model AdminUser {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique @db.VarChar(160)
+  name         String    @default("Administrator") @db.VarChar(120)
+  passwordHash String    @db.VarChar(100)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+/// Key-value flags, e.g. the marker that stops the starter catalogue being re-added after an admin deletes items.
+model AppSetting {
+  key       String   @id @db.VarChar(80)
+  value     Json
+  updatedAt DateTime @updatedAt
+}

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" role="img">
+
+<defs>
+  <radialGradient id="bg" cx="50%" cy="38%" r="75%"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e6ecf4"/></radialGradient>
+  <linearGradient id="light" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f6f9"/><stop offset="1" stop-color="#d5dbe3"/></linearGradient>
+  <linearGradient id="lightSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#c3cad4"/><stop offset="1" stop-color="#aeb6c2"/></linearGradient>
+  <linearGradient id="dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b4452"/><stop offset="1" stop-color="#1f2630"/></linearGradient>
+  <linearGradient id="darkSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#171c24"/><stop offset="1" stop-color="#0f1319"/></linearGradient>
+  <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef1f5"/><stop offset=".45" stop-color="#c9d0d9"/><stop offset=".55" stop-color="#b7c0cc"/><stop offset="1" stop-color="#dfe4ea"/></linearGradient>
+  <linearGradient id="metalV" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#dfe4ea"/><stop offset=".45" stop-color="#b9c2cd"/><stop offset=".6" stop-color="#eef1f5"/><stop offset="1" stop-color="#c3cbd5"/></linearGradient>
+  <linearGradient id="screen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1d4ed8"/><stop offset="1" stop-color="#0b2a6b"/></linearGradient>
+  <linearGradient id="blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#1d4ed8"/></linearGradient>
+  <linearGradient id="cableG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#64748b"/><stop offset="1" stop-color="#334155"/></linearGradient>
+  <linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22a35a"/><stop offset="1" stop-color="#157a41"/></linearGradient>
+  <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#0f172a" flood-opacity=".16"/></filter>
+</defs>
+<rect width="480" height="360" fill="url(#bg)"/>
+<ellipse cx="240" cy="300" rx="110" ry="14" fill="#0f172a" opacity=".10"/>
+<g filter="url(#soft)">
+    <path d="M160 64h160l14 -12v232l-14 12H160z" fill="#7d8794"/>
+    <rect x="160" y="64" width="160" height="232" rx="10" fill="url(#light)" stroke="#a7b0bc"/>
+    <rect x="160" y="64" width="160" height="46" rx="10" fill="#c3cad4"/><circle cx="182" cy="87" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M179.4 87h5.2" stroke="#4b5563" stroke-width="1.3"/><circle cx="220.7" cy="87" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M218.1 87h5.2" stroke="#4b5563" stroke-width="1.3"/><circle cx="259.4" cy="87" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M256.79999999999995 87h5.2" stroke="#4b5563" stroke-width="1.3"/><circle cx="298.1" cy="87" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M295.5 87h5.2" stroke="#4b5563" stroke-width="1.3"/>
+    <rect x="160" y="250" width="160" height="46" rx="10" fill="#c3cad4"/><circle cx="182" cy="273" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M179.4 273h5.2" stroke="#4b5563" stroke-width="1.3"/><circle cx="220.7" cy="273" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M218.1 273h5.2" stroke="#4b5563" stroke-width="1.3"/><circle cx="259.4" cy="273" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M256.79999999999995 273h5.2" stroke="#4b5563" stroke-width="1.3"/><circle cx="298.1" cy="273" r="6" fill="#9aa4b1" stroke="#6b7480" stroke-width="1"/><path d="M295.5 273h5.2" stroke="#4b5563" stroke-width="1.3"/>
+    <rect x="184" y="124" width="112" height="112" rx="6" fill="url(#dark)"/>
+    <rect x="216" y="150" width="48" height="40" rx="4" fill="#64748b"/><rect x="226" y="160" width="28" height="20" rx="2" fill="#1f2937"/>
+    <text x="240" y="216" text-anchor="middle" font-family="Arial" font-size="12" font-weight="700" fill="#e2e8f0">9A</text>
+    <text x="240" y="230" text-anchor="middle" font-family="Arial" font-size="8" fill="#94a3b8">240V 50Hz · 1NO</text>
+  </g>
+</svg>

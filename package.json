@@ -1,0 +1,46 @@
+{
+  "name": "voltex",
+  "description": "VOLTEX web platform, API, and shared domain packages",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "frontend",
+    "backend",
+    "packages/*"
+  ],
+  "engines": {
+    "node": "^22.12.0 || >=24.0.0"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs && npm run db:generate && npm run build:shared",
+    "dev": "npm run build:shared && concurrently --kill-others -n backend,frontend -c blue,cyan \"npm run dev -w @voltex/api\" \"npm run dev -w @voltex/web\"",
+    "dev:frontend": "npm run build:shared && npm run dev -w @voltex/web",
+    "dev:backend": "npm run build:shared && npm run dev -w @voltex/api",
+    "build": "npm run build:shared && npm run build -w @voltex/api && npm run build -w @voltex/web",
+    "build:shared": "npm run build -w @voltex/shared",
+    "build:frontend": "npm run build:shared && npm run build -w @voltex/web",
+    "build:backend": "npm run build:shared && npm run build -w @voltex/api",
+    "start": "concurrently --kill-others -n backend,frontend -c blue,cyan \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:frontend": "npm run start -w @voltex/web",
+    "start:backend": "npm run start -w @voltex/api",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run build:shared && npm run typecheck --workspaces --if-present",
+    "test": "npm run build:shared && npm run test --workspaces --if-present",
+    "test:unit": "npm run test -w @voltex/shared && npm run test:unit -w @voltex/api",
+    "test:integration": "npm run build:shared && npm run test:integration -w @voltex/api",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "db:generate": "npm exec -w @voltex/api -- prisma generate",
+    "db:migrate": "npm run db:migrate -w @voltex/api",
+    "db:deploy": "npm run db:deploy -w @voltex/api",
+    "db:seed": "npm run db:seed -w @voltex/api",
+    "admin:create": "npm run admin:create -w @voltex/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  },
+  "allowScripts": {
+    "prisma@7.10.1": true,
+    "@prisma/engines@7.10.1": true,
+    "esbuild@0.28.2": true
+  }
+}

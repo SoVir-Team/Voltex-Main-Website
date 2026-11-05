@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" role="img">
+
+<defs>
+  <radialGradient id="bg" cx="50%" cy="38%" r="75%"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e6ecf4"/></radialGradient>
+  <linearGradient id="light" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f6f9"/><stop offset="1" stop-color="#d5dbe3"/></linearGradient>
+  <linearGradient id="lightSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#c3cad4"/><stop offset="1" stop-color="#aeb6c2"/></linearGradient>
+  <linearGradient id="dark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b4452"/><stop offset="1" stop-color="#1f2630"/></linearGradient>
+  <linearGradient id="darkSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#171c24"/><stop offset="1" stop-color="#0f1319"/></linearGradient>
+  <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef1f5"/><stop offset=".45" stop-color="#c9d0d9"/><stop offset=".55" stop-color="#b7c0cc"/><stop offset="1" stop-color="#dfe4ea"/></linearGradient>
+  <linearGradient id="metalV" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#dfe4ea"/><stop offset=".45" stop-color="#b9c2cd"/><stop offset=".6" stop-color="#eef1f5"/><stop offset="1" stop-color="#c3cbd5"/></linearGradient>
+  <linearGradient id="screen" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1d4ed8"/><stop offset="1" stop-color="#0b2a6b"/></linearGradient>
+  <linearGradient id="blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#1d4ed8"/></linearGradient>
+  <linearGradient id="cableG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#64748b"/><stop offset="1" stop-color="#334155"/></linearGradient>
+  <linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22a35a"/><stop offset="1" stop-color="#157a41"/></linearGradient>
+  <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="7" flood-color="#0f172a" flood-opacity=".16"/></filter>
+</defs>
+<rect width="480" height="360" fill="url(#bg)"/>
+<ellipse cx="240" cy="300" rx="90" ry="14" fill="#0f172a" opacity=".10"/>
+<g filter="url(#soft)">
+    <path d="M182 62h116l12 -10v244l-12 10H182z" fill="#0c3d22"/>
+    <rect x="182" y="62" width="116" height="244" rx="8" fill="url(#light)" stroke="#a7b0bc"/>
+    <rect x="182" y="62" width="116" height="40" rx="8" fill="url(#green)"/>
+    <text x="240" y="87" text-anchor="middle" font-family="Arial" font-size="12" font-weight="700" fill="#fff">SWITCH</text>
+    <rect x="204" y="114" width="44" height="28" rx="2" fill="#1f2937"/><rect x="214" y="120" width="24" height="14" rx="1" fill="#0b0f15"/><rect x="220" y="134" width="12" height="4" fill="#0b0f15"/><circle cx="264" cy="122" r="3.5" fill="#22c55e"/><circle cx="264" cy="134" r="3.5" fill="#22c55e"/><rect x="204" y="150" width="44" height="28" rx="2" fill="#1f2937"/><rect x="214" y="156" width="24" height="14" rx="1" fill="#0b0f15"/><rect x="220" y="170" width="12" height="4" fill="#0b0f15"/><circle cx="264" cy="158" r="3.5" fill="#22c55e"/><circle cx="264" cy="170" r="3.5" fill="#f59e0b"/><rect x="204" y="186" width="44" height="28" rx="2" fill="#1f2937"/><rect x="214" y="192" width="24" height="14" rx="1" fill="#0b0f15"/><rect x="220" y="206" width="12" height="4" fill="#0b0f15"/><circle cx="264" cy="194" r="3.5" fill="#22c55e"/><circle cx="264" cy="206" r="3.5" fill="#22c55e"/><rect x="204" y="222" width="44" height="28" rx="2" fill="#1f2937"/><rect x="214" y="228" width="24" height="14" rx="1" fill="#0b0f15"/><rect x="220" y="242" width="12" height="4" fill="#0b0f15"/><circle cx="264" cy="230" r="3.5" fill="#22c55e"/><circle cx="264" cy="242" r="3.5" fill="#f59e0b"/><rect x="204" y="258" width="44" height="28" rx="2" fill="#1f2937"/><rect x="214" y="264" width="24" height="14" rx="1" fill="#0b0f15"/><rect x="220" y="278" width="12" height="4" fill="#0b0f15"/><circle cx="264" cy="266" r="3.5" fill="#22c55e"/><circle cx="264" cy="278" r="3.5" fill="#22c55e"/>
+    <text x="240" y="300" text-anchor="middle" font-family="Arial" font-size="9" fill="#475569">10/100 Mbps</text>
+  </g>
+</svg>
