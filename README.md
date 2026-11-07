@@ -11,7 +11,6 @@ Voltex-Main-Site/
 ├── packages/shared/      # Shared TypeScript contracts, pricing, and validation
 ├── scripts/              # Repository setup helpers
 ├── docs/                 # Architecture documentation
-├── deploy/               # Production operations guide
 ├── .github/workflows/    # Automated quality checks
 ├── package.json          # Workspace orchestration and developer commands
 └── package-lock.json     # Dependency lockfile for the whole repository
@@ -88,11 +87,10 @@ Unit tests can run without a database. Integration tests and the full check requ
 
 ## Configuration and production
 
-Develop and test on `main`. Promote changes with a pull request into `production` when ready to host them. Both branches run CI; only `production` can trigger server deployment. Follow [server and CI/CD setup](deploy/SERVER.md) to configure hosting and GitHub secrets.
 
 The committed environment templates document available settings:
 
 - [Backend configuration](backend/.env.example): database, authentication, origins, uploads, and API settings.
 - [Frontend configuration](frontend/.env.example): internal API address and public site URL.
 
-Keep actual environment files and credentials out of version control. Build and run instructions, persistent storage, health checks, and release responsibilities are covered in [the production guide](deploy/README.md). See [architecture](docs/architecture.md), [frontend](frontend/README.md), and [backend](backend/README.md) for ownership and implementation details.
+Keep actual environment files and credentials out of version control. See [architecture](docs/architecture.md), [frontend](frontend/README.md), and [backend](backend/README.md) for ownership and implementation details.

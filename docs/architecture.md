@@ -51,4 +51,4 @@ The API includes environment validation, Helmet headers, configured CORS origins
 
 The root npm scripts build shared code before dependent applications. One root lockfile describes all workspaces. CI uses Node.js 24 and a disposable PostgreSQL database to run lint, type checks, tests, and production builds. CI does not deploy releases.
 
-Application environment files, build outputs, generated Prisma files, and uploaded content are excluded from source control. Deployments apply committed migrations explicitly and retain uploaded content outside replaceable release directories. See [the production guide](../deploy/README.md) for the operational sequence.
+Application environment files, build outputs, generated Prisma files, and uploaded content are excluded from source control. Deployments apply committed migrations explicitly and retain uploaded content outside replaceable release directories.
