@@ -1,0 +1,186 @@
+{
+  "greet": {
+    "file": "greet.mp3",
+    "duration": 7.35
+  },
+  "sandbox-intro": {
+    "file": "sandbox-intro.mp3",
+    "duration": 4.99
+  },
+  "m1-intro": {
+    "file": "m1-intro.mp3",
+    "duration": 7.2
+  },
+  "m1-success": {
+    "file": "m1-success.mp3",
+    "duration": 4.74
+  },
+  "m2-intro": {
+    "file": "m2-intro.mp3",
+    "duration": 4.98
+  },
+  "m2-success": {
+    "file": "m2-success.mp3",
+    "duration": 4.54
+  },
+  "m3-intro": {
+    "file": "m3-intro.mp3",
+    "duration": 6.17
+  },
+  "m3-success": {
+    "file": "m3-success.mp3",
+    "duration": 4.78
+  },
+  "m4-intro": {
+    "file": "m4-intro.mp3",
+    "duration": 6.42
+  },
+  "m4-success": {
+    "file": "m4-success.mp3",
+    "duration": 5.32
+  },
+  "m5-intro": {
+    "file": "m5-intro.mp3",
+    "duration": 5.67
+  },
+  "m5-success": {
+    "file": "m5-success.mp3",
+    "duration": 3.37
+  },
+  "m6-intro": {
+    "file": "m6-intro.mp3",
+    "duration": 6.69
+  },
+  "m6-success": {
+    "file": "m6-success.mp3",
+    "duration": 4.17
+  },
+  "m7-intro": {
+    "file": "m7-intro.mp3",
+    "duration": 6.45
+  },
+  "m7-success": {
+    "file": "m7-success.mp3",
+    "duration": 5.29
+  },
+  "m8-intro": {
+    "file": "m8-intro.mp3",
+    "duration": 5.59
+  },
+  "m8-success": {
+    "file": "m8-success.mp3",
+    "duration": 4.47
+  },
+  "short": {
+    "file": "short.mp3",
+    "duration": 6.19
+  },
+  "no-resistor": {
+    "file": "no-resistor.mp3",
+    "duration": 5.84
+  },
+  "overcurrent": {
+    "file": "overcurrent.mp3",
+    "duration": 6.51
+  },
+  "burnt-led": {
+    "file": "burnt-led.mp3",
+    "duration": 5.86
+  },
+  "burnt-part": {
+    "file": "burnt-part.mp3",
+    "duration": 4.8
+  },
+  "cap-pop": {
+    "file": "cap-pop.mp3",
+    "duration": 5.3
+  },
+  "reversed": {
+    "file": "reversed.mp3",
+    "duration": 4.29
+  },
+  "reversed-led": {
+    "file": "reversed-led.mp3",
+    "duration": 5.7
+  },
+  "floating-pin": {
+    "file": "floating-pin.mp3",
+    "duration": 3.69
+  },
+  "trace-width": {
+    "file": "trace-width.mp3",
+    "duration": 4.89
+  },
+  "clearance": {
+    "file": "clearance.mp3",
+    "duration": 6.43
+  },
+  "overlap": {
+    "file": "overlap.mp3",
+    "duration": 4.06
+  },
+  "edge": {
+    "file": "edge.mp3",
+    "duration": 3.87
+  },
+  "acute-angle": {
+    "file": "acute-angle.mp3",
+    "duration": 6.98
+  },
+  "reset-floating": {
+    "file": "reset-floating.mp3",
+    "duration": 5.86
+  },
+  "no-power": {
+    "file": "no-power.mp3",
+    "duration": 3.75
+  },
+  "power-on": {
+    "file": "power-on.mp3",
+    "duration": 2.98
+  },
+  "first-trace": {
+    "file": "first-trace.mp3",
+    "duration": 4.1
+  },
+  "first-via": {
+    "file": "first-via.mp3",
+    "duration": 4.17
+  },
+  "probe-hint": {
+    "file": "probe-hint.mp3",
+    "duration": 4.56
+  },
+  "all-clear": {
+    "file": "all-clear.mp3",
+    "duration": 4.46
+  },
+  "fab-blocked": {
+    "file": "fab-blocked.mp3",
+    "duration": 5.12
+  },
+  "fab-view": {
+    "file": "fab-view.mp3",
+    "duration": 6.31
+  },
+  "encourage": {
+    "file": "encourage.mp3",
+    "duration": 3.83
+  },
+  "wake": {
+    "file": "wake.mp3",
+    "duration": 1.83
+  },
+  "project-intro": {
+    "file": "project-intro.mp3",
+    "duration": 5.38
+  },
+  "project-success": {
+    "file": "project-success.mp3",
+    "duration": 4.83
+  },
+  "route-blocked": {
+    "file": "route-blocked.mp3",
+    "duration": 6.84
+  }
+}

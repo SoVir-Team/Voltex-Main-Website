@@ -16,3 +16,7 @@ release/
 uploads-test/
 /backend/src/generated/
 *.log
+
+# Local agent config
+.claude/
+.gstack/

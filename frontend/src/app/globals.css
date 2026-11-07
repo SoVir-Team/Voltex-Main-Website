@@ -195,3 +195,34 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Student Lab: current flow, focus ring, burnt smoke and the fab-view light sweep. */
+@keyframes lab-flow {
+  to { stroke-dashoffset: -1; }
+}
+@keyframes lab-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(1.25); }
+}
+@keyframes lab-smoke {
+  from { opacity: 0.8; transform: translateY(0) scale(0.8); }
+  to { opacity: 0; transform: translateY(-2.5px) scale(1.6); }
+}
+@keyframes lab-sweep {
+  from { transform: translateX(0) skewX(-18deg); }
+  to { transform: translateX(800%) skewX(-18deg); }
+}
+.lab-flow { animation: lab-flow 1s linear infinite; }
+.lab-focus { transform-box: fill-box; transform-origin: center; animation: lab-pulse 1.2s ease-in-out infinite; }
+.lab-ring { transform-box: fill-box; transform-origin: center; animation: lab-pulse 0.35s ease-in-out infinite; }
+.lab-smoke circle { transform-box: fill-box; transform-origin: center; animation: lab-smoke 1.6s ease-out infinite; }
+.lab-smoke circle + circle { animation-delay: 0.6s; }
+.lab-sweep { transform-box: fill-box; animation: lab-sweep 2.4s var(--ease-out-quart) 0.3s 1 both; }
+@media (prefers-reduced-motion: reduce) {
+  /* Still frames: dashes still show where current flows, rings still mark the problem. */
+  .lab-flow,
+  .lab-focus,
+  .lab-ring,
+  .lab-smoke circle { animation: none; }
+  .lab-sweep { display: none; }
+}
