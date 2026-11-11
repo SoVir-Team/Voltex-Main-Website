@@ -1,6 +1,6 @@
 import { copperGap, sharesLayer, type Netlist } from "./netlist.ts";
 import { PART_DEFS, partBox } from "./parts.ts";
-import type { SimSnapshot } from "./solver.ts";
+import { sourceOf, type SimSnapshot } from "./solver.ts";
 import type { Board, Pt } from "./types.ts";
 import { MM } from "./types.ts";
 
@@ -128,7 +128,7 @@ export function runDrc(board: Board, nl: Netlist, snap: SimSnapshot | null): Drc
   for (const part of board.parts) {
     const st = snap.parts[part.id];
     if (!st) continue;
-    if ((part.type === "battery9v" || part.type === "coincell") && st.stress > 1) {
+    if ((sourceOf(part) || part.type === "vcc") && st.stress > 1) {
       issues.push({ code: "short", severity: "error", message: `Short circuit: ${part.id} is pushing ${st.current.toFixed(1)} A.`, at: at(part.id), partIds: [part.id] });
     }
     if (part.type === "led" && (st.burnt || st.stress > 1)) {

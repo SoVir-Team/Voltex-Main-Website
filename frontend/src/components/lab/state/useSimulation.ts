@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildNetlist, type Netlist } from "../engine/netlist.ts";
-import { Simulator, batteryOf, type SimEvent, type SimSnapshot } from "../engine/solver.ts";
+import { Simulator, hasSupply, type SimEvent, type SimSnapshot } from "../engine/solver.ts";
 import type { Board } from "../engine/types.ts";
 
 /**
@@ -67,6 +67,6 @@ export function useSimulation(board: Board, powered: boolean, ambient: number, p
 
   const repair = (id: string) => simRef.current?.repair(id);
   const burntIds = useCallback(() => simRef.current?.burntIds() ?? [], []);
-  const hasPower = board.parts.some((p) => batteryOf(p.type));
+  const hasPower = hasSupply(board);
   return { snap: powered ? snap : null, netlist, repair, hasPower, burntIds };
 }

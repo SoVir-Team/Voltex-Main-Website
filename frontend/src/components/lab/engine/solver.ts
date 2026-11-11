@@ -4,15 +4,19 @@ import type { Board, Part } from "./types.ts";
 
 /**
  * Circuit simulation by modified nodal analysis. Every element stamps conductances and current sources into
- * G·v = i. Diodes, LEDs and the transistor are exponential and solved by Newton–Raphson with SPICE-style
- * junction limiting. Capacitors use backward-Euler companion models; the 555 is a behavioural latch.
- * Batteries are Norton sources (voltage behind internal resistance), so no extra branch rows are needed.
+ * G·v = i. Diodes, LEDs, transistors and MOSFETs are nonlinear and solved by Newton–Raphson with SPICE-style
+ * junction limiting. Capacitors and inductors use backward-Euler companion models; the 555, relay and shift
+ * register are behavioural latches. Voltage sources are Norton sources (voltage behind a small internal
+ * resistance), so no extra branch rows are needed.
  */
 
 const VT = 0.02585;
 const GMIN = 1e-9;
 const OPEN = 1e-9;
 const CLOSED = 1 / 0.05;
+/** Oscilloscope sample spacing and window length. */
+const SCOPE_DT = 0.002;
+const SCOPE_N = 250;
 
 export interface SimInputs {
   /** Room light for LDRs, 0 dark .. 1 bright. */
@@ -34,6 +38,16 @@ export interface PartState {
   reversed: boolean;
   /** 0..1 how close to its limit; above 1 it is being damaged. */
   stress: number;
+  /** What a meter shows: volts, amps or ohms. */
+  reading?: number;
+  /** Oscilloscope channels A and B, oldest sample first. */
+  wave?: [number[], number[]];
+  /** Per-segment glow for a 7-segment display, or output bits for a shift register. */
+  segs?: number[];
+  /** 0..1: motor speed, servo angle (0..180°) or LCD backlight. */
+  level?: number;
+  /** 0..1 rotation of a motor shaft, for drawing. */
+  phase?: number;
 }
 
 export type SimEvent =
@@ -46,7 +60,7 @@ export type SimEvent =
 export interface SimSnapshot {
   time: number;
   groundNet: number;
-  /** Voltage of each net relative to the battery's negative terminal. */
+  /** Voltage of each net relative to ground (a ground symbol, or the first supply's negative terminal). */
   netV: number[];
   parts: Record<string, PartState>;
 }
@@ -62,12 +76,83 @@ function ledModel(color: Part["props"]["color"]): DiodeModel {
   return { n: LED_N, is: 0.02 / Math.expm1(vf / (LED_N * VT)) };
 }
 const DIODE: DiodeModel = { is: 2.5e-9, n: 1.75 };
-const NPN = { is: 1e-14, bf: 150, br: 2 };
+/** About 0.3 V at 20 mA. */
+const SCHOTTKY: DiodeModel = { n: 1.05, is: 0.02 / Math.expm1(0.3 / (1.05 * VT)) };
+/** Reverse breakdown junction of a Zener: sharp, so the voltage barely moves with current. */
+const ZENER: DiodeModel = { is: 1e-12, n: 1 };
+const zenerOffset = (vz: number) => vz - ZENER.n * VT * Math.log(5e-3 / ZENER.is);
+const OPTO_LED: DiodeModel = { n: LED_N, is: 0.02 / Math.expm1(1.2 / (LED_N * VT)) };
+const OPTO_CTR = 1;
 
-export function batteryOf(type: Part["type"]): { v: number; rint: number } | null {
-  if (type === "battery9v") return { v: 9, rint: 1.7 };
-  if (type === "coincell") return { v: 3, rint: 30 };
+const BJT: Record<string, { is: number; bf: number; br: number; imax: number; pmax: number }> = {
+  "2N2222": { is: 1e-14, bf: 150, br: 2, imax: 0.8, pmax: 0.625 },
+  BC547: { is: 1e-14, bf: 300, br: 2, imax: 0.1, pmax: 0.5 },
+  BC557: { is: 1e-14, bf: 250, br: 2, imax: 0.1, pmax: 0.5 },
+  "2N2907": { is: 1e-14, bf: 150, br: 2, imax: 0.6, pmax: 0.625 },
+};
+const MOS: Record<string, { vth: number; k: number; imax: number; pmax: number }> = {
+  IRF540: { vth: 3, k: 2, imax: 28, pmax: 2 },
+  AO3400: { vth: 1, k: 4, imax: 5.7, pmax: 1.4 },
+  IRF9540: { vth: 3, k: 1, imax: 19, pmax: 2 },
+  AO3401: { vth: 1, k: 3, imax: 4, pmax: 1.4 },
+};
+
+/** A voltage source between pins `p` (+) and `n` (−): voltage behind an internal resistance. */
+export interface Source {
+  p: string;
+  n: string;
+  rint: number;
+  /** Above this current the source is treated as shorted. */
+  imax: number;
+  v: (t: number) => number;
+}
+
+export function sourceOf(part: Part): Source | null {
+  const V = part.props.value;
+  switch (part.type) {
+    case "battery9v": {
+      const v = V ?? 9;
+      return { p: "+", n: "-", rint: 1.7, imax: (0.6 * v) / 1.7, v: () => v };
+    }
+    case "coincell": {
+      const v = V ?? 3;
+      return { p: "+", n: "-", rint: 30, imax: (0.6 * v) / 30, v: () => v };
+    }
+    case "dcsource": {
+      const v = V ?? 5;
+      return { p: "+", n: "-", rint: 0.01, imax: 10, v: () => v };
+    }
+    case "usb":
+      return { p: "VBUS", n: "GND", rint: 0.05, imax: 2, v: () => 5 };
+    case "acsource": {
+      const a = V ?? 5;
+      const f = part.props.freq ?? 50;
+      return { p: "+", n: "-", rint: 0.01, imax: 10, v: (t) => a * Math.sin(2 * Math.PI * f * t) };
+    }
+    case "pulsegen": {
+      const a = V ?? 5;
+      const f = part.props.freq ?? 1;
+      const d = (part.props.duty ?? 50) / 100;
+      return { p: "+", n: "-", rint: 0.01, imax: 10, v: (t) => ((((t * f) % 1) + 1) % 1 < d ? a : 0) };
+    }
+  }
   return null;
+}
+
+/** Parts that can power a circuit. */
+export const isSupply = (p: Part) => sourceOf(p) !== null || p.type === "vcc" || p.type === "isource";
+
+/** The pin that defines 0 V: a ground symbol, else the first voltage source's negative terminal. */
+function referencePin(board: Board): string | null {
+  const gnd = board.parts.find((p) => p.type === "gnd");
+  if (gnd) return `${gnd.id}.1`;
+  const src = [...board.parts].filter((p) => sourceOf(p)).sort((a, b) => a.id.localeCompare(b.id))[0];
+  return src ? `${src.id}.${sourceOf(src)!.n}` : null;
+}
+
+/** True when the board has something to power it and a 0 V reference to measure from. */
+export function hasSupply(board: Board): boolean {
+  return board.parts.some(isSupply) && referencePin(board) !== null;
 }
 
 export function ldrOhms(ambient: number): number {
@@ -83,6 +168,15 @@ function pnjlim(vnew: number, vold: number, vt: number, vcrit: number): number {
     return vt * Math.log(vnew / vt);
   }
   return vnew;
+}
+
+/** Square-law MOSFET drain current (n-channel sense) with its two small-signal conductances. */
+function mosI(vgs: number, vds: number, m: { vth: number; k: number }) {
+  const vov = vgs - m.vth;
+  if (vov <= 0) return { id: 0, gm: 0, gds: 0 };
+  if (vds < vov) return { id: m.k * (2 * vov * vds - vds * vds), gm: 2 * m.k * vds, gds: 2 * m.k * (vov - vds) };
+  const lam = 0.01;
+  return { id: m.k * vov * vov * (1 + lam * vds), gm: 2 * m.k * vov * (1 + lam * vds), gds: m.k * vov * vov * lam };
 }
 
 /** Solve A·x = b in place by Gaussian elimination with partial pivoting. */
@@ -112,6 +206,9 @@ function solveLinear(A: Float64Array[], b: Float64Array): Float64Array {
   return x;
 }
 
+type Term = { p: number; n: number; g: number; v0: number };
+const neg = (ts: Term[]) => ts.map((t) => ({ ...t, g: -t.g }));
+
 class Stamper {
   G: Float64Array[];
   i: Float64Array;
@@ -133,11 +230,21 @@ class Stamper {
     if (a >= 0) this.i[a] -= I;
     if (b >= 0) this.i[b] += I;
   }
+  /** Voltage-controlled current gm·(v(c) − v(d)) flowing from node a to node b through the element. */
+  vccs(a: number, b: number, c: number, d: number, gm: number) {
+    const add = (r: number, col: number, v: number) => {
+      if (r >= 0 && col >= 0) this.G[r][col] += v;
+    };
+    add(a, c, gm);
+    add(a, d, -gm);
+    add(b, c, -gm);
+    add(b, d, gm);
+  }
   /**
    * Linearised nonlinear terminal current: I(v) ≈ I0 + Σ g·(vj − vj0), flowing from node `row` into the device,
    * where vj = v(p) − v(n) for each controlling junction.
    */
-  nl(row: number, I0: number, terms: { p: number; n: number; g: number; v0: number }[]) {
+  nl(row: number, I0: number, terms: Term[]) {
     if (row < 0) return;
     let rhs = -I0;
     for (const t of terms) {
@@ -153,10 +260,13 @@ interface Damage {
   over: number;
 }
 
+const SEGMENTS = ["a", "b", "c", "d", "e", "f", "g", "dp"];
+
 export class Simulator {
   readonly board: Board;
   readonly netlist: Netlist;
   readonly ground: number;
+  private readonly supplied: boolean;
   /** Net index to matrix row, -1 for ground. */
   private row: number[];
   private n: number;
@@ -165,6 +275,8 @@ export class Simulator {
   time = 0;
   private capV = new Map<string, number>();
   private latch = new Map<string, boolean>();
+  /** Other state carried between steps: inductor currents, shift registers, servo pulses, scope buffers. */
+  private mem = new Map<string, number[]>();
   private junction = new Map<string, number>();
   private damage = new Map<string, Damage>();
   private burnt: Set<string>;
@@ -173,29 +285,31 @@ export class Simulator {
   private resetWarned = new Set<string>();
   events: SimEvent[] = [];
 
-  constructor(board: Board, carry?: { burnt?: Set<string>; capV?: Map<string, number>; latch?: Map<string, boolean> }, netlist?: Netlist) {
+  constructor(board: Board, carry?: { burnt?: Set<string>; capV?: Map<string, number>; latch?: Map<string, boolean>; mem?: Map<string, number[]> }, netlist?: Netlist) {
     this.board = board;
     this.netlist = netlist ?? buildNetlist(board);
     this.burnt = new Set(carry?.burnt ?? []);
     if (carry?.capV) this.capV = new Map(carry.capV);
     if (carry?.latch) this.latch = new Map(carry.latch);
-    const battery = [...board.parts].filter((p) => batteryOf(p.type)).sort((a, b) => a.id.localeCompare(b.id))[0];
-    this.ground = battery ? (this.netlist.netOf.get(`${battery.id}.-`) ?? -1) : -1;
+    if (carry?.mem) this.mem = new Map([...carry.mem].map(([k, v]) => [k, [...v]]));
+    const ref = referencePin(board);
+    this.ground = ref ? (this.netlist.netOf.get(ref) ?? -1) : -1;
+    this.supplied = board.parts.some(isSupply);
     this.row = [];
     let k = 0;
     for (let i = 0; i < this.netlist.nets.length; i++) this.row.push(i === this.ground ? -1 : k++);
     this.n = k;
     this.v = new Float64Array(k);
-    this.dynamic = board.parts.some((p) => p.type === "ceramic" || p.type === "electrolytic" || p.type === "timer555");
+    this.dynamic = board.parts.some((p) => ["ceramic", "electrolytic", "timer555", "inductor", "transformer", "acsource", "pulsegen"].includes(p.type));
   }
 
   get powered(): boolean {
-    return this.ground >= 0;
+    return this.ground >= 0 && this.supplied;
   }
 
   /** State that should survive rebuilding the simulator after an edit. */
   carry() {
-    return { burnt: this.burnt, capV: this.capV, latch: this.latch };
+    return { burnt: this.burnt, capV: this.capV, latch: this.latch, mem: this.mem };
   }
 
   private node(part: Part, pin: string): number {
@@ -207,64 +321,96 @@ export class Simulator {
     return node < 0 ? 0 : v[node];
   }
 
-  private diode(s: Stamper, v: Float64Array, key: string, a: number, k: number, m: DiodeModel) {
+  private diode(s: Stamper, v: Float64Array, key: string, a: number, k: number, m: DiodeModel, offset = 0) {
     const nvt = m.n * VT;
     const vcrit = nvt * Math.log(nvt / (Math.SQRT2 * m.is));
-    const raw = this.V(v, a) - this.V(v, k);
+    const raw = this.V(v, a) - this.V(v, k) - offset;
     const old = this.junction.get(key) ?? 0;
     const vd = pnjlim(raw, old, nvt, vcrit);
     this.junction.set(key, vd);
     const e = Math.exp(Math.min(vd / nvt, 80));
     const I = m.is * (e - 1);
     const g = (m.is / nvt) * e + GMIN;
-    s.nl(a, I, [{ p: a, n: k, g, v0: vd }]);
-    s.nl(k, -I, [{ p: a, n: k, g: -g, v0: vd }]);
+    s.nl(a, I, [{ p: a, n: k, g, v0: vd + offset }]);
+    s.nl(k, -I, [{ p: a, n: k, g: -g, v0: vd + offset }]);
     return Math.abs(vd - raw) < 1e-9;
   }
 
-  private bjt(s: Stamper, v: Float64Array, key: string, c: number, b: number, e: number) {
-    const vcrit = VT * Math.log(VT / (Math.SQRT2 * NPN.is));
-    const rbe = this.V(v, b) - this.V(v, e);
-    const rbc = this.V(v, b) - this.V(v, c);
+  /** Ebers–Moll transistor. `sg` is +1 for NPN and −1 for PNP (every junction and current mirrored). */
+  private bjt(s: Stamper, v: Float64Array, key: string, c: number, b: number, e: number, sg: 1 | -1, m: (typeof BJT)[string]) {
+    const vcrit = VT * Math.log(VT / (Math.SQRT2 * m.is));
+    const rbe = sg * (this.V(v, b) - this.V(v, e));
+    const rbc = sg * (this.V(v, b) - this.V(v, c));
     const vbe = pnjlim(rbe, this.junction.get(key + ":be") ?? 0, VT, vcrit);
     const vbc = pnjlim(rbc, this.junction.get(key + ":bc") ?? 0, VT, vcrit);
     this.junction.set(key + ":be", vbe);
     this.junction.set(key + ":bc", vbc);
     const ef = Math.exp(Math.min(vbe / VT, 80));
     const er = Math.exp(Math.min(vbc / VT, 80));
-    const iF = NPN.is * (ef - 1);
-    const iR = NPN.is * (er - 1);
-    const gF = (NPN.is / VT) * ef + GMIN;
-    const gR = (NPN.is / VT) * er + GMIN;
-    const Ic = iF - iR - iR / NPN.br;
-    const Ib = iF / NPN.bf + iR / NPN.br;
-    const be = { p: b, n: e, v0: vbe };
-    const bc = { p: b, n: c, v0: vbc };
-    const dIc = [{ ...be, g: gF }, { ...bc, g: -gR * (1 + 1 / NPN.br) }];
-    const dIb = [{ ...be, g: gF / NPN.bf }, { ...bc, g: gR / NPN.br }];
-    s.nl(c, Ic, dIc);
-    s.nl(b, Ib, dIb);
-    s.nl(e, -(Ic + Ib), [...dIc, ...dIb].map((t) => ({ ...t, g: -t.g })));
+    const iF = m.is * (ef - 1);
+    const iR = m.is * (er - 1);
+    const gF = (m.is / VT) * ef + GMIN;
+    const gR = (m.is / VT) * er + GMIN;
+    const Ic = iF - iR - iR / m.br;
+    const Ib = iF / m.bf + iR / m.br;
+    const be = sg === 1 ? { p: b, n: e, v0: vbe } : { p: e, n: b, v0: vbe };
+    const bc = sg === 1 ? { p: b, n: c, v0: vbc } : { p: c, n: b, v0: vbc };
+    const dIc = [{ ...be, g: sg * gF }, { ...bc, g: -sg * gR * (1 + 1 / m.br) }];
+    const dIb = [{ ...be, g: (sg * gF) / m.bf }, { ...bc, g: (sg * gR) / m.br }];
+    s.nl(c, sg * Ic, dIc);
+    s.nl(b, sg * Ib, dIb);
+    s.nl(e, -sg * (Ic + Ib), neg([...dIc, ...dIb]));
     return Math.abs(vbe - rbe) < 1e-9 && Math.abs(vbc - rbc) < 1e-9;
+  }
+
+  /** Square-law MOSFET, symmetric in drain and source. `pol` is +1 for N-channel and −1 for P-channel. */
+  private mos(s: Stamper, v: Float64Array, key: string, D: number, G: number, S: number, pol: 1 | -1, m: (typeof MOS)[string]) {
+    const swapped = pol * (this.V(v, D) - this.V(v, S)) < 0;
+    const d = swapped ? S : D;
+    const src = swapped ? D : S;
+    const vgsRaw = pol * (this.V(v, G) - this.V(v, src));
+    const vds = pol * (this.V(v, d) - this.V(v, src));
+    const old = this.junction.get(key) ?? 0;
+    const vgs = Math.abs(vgsRaw - old) > 1 ? old + Math.sign(vgsRaw - old) : vgsRaw;
+    this.junction.set(key, vgs);
+    const { id, gm, gds } = mosI(vgs, vds, m);
+    const terms: Term[] = [
+      pol === 1 ? { p: G, n: src, g: gm, v0: vgs } : { p: src, n: G, g: -gm, v0: vgs },
+      pol === 1 ? { p: d, n: src, g: gds + GMIN, v0: vds } : { p: src, n: d, g: -(gds + GMIN), v0: vds },
+    ];
+    s.nl(d, pol * id, terms);
+    s.nl(src, -pol * id, neg(terms));
+    return vgs === vgsRaw;
   }
 
   private stamp(s: Stamper, v: Float64Array, dt: number, inputs: SimInputs): boolean {
     let settled = true;
+    const t = this.time + dt;
     for (let i = 0; i < this.n; i++) s.G[i][i] += GMIN;
     for (const part of this.board.parts) {
       const P = (pin: string) => this.node(part, pin);
+      const U = (pin: string) => this.V(v, P(pin));
       const dead = this.burnt.has(part.id);
-      const bat = batteryOf(part.type);
+      const bat = sourceOf(part);
       if (bat) {
         const g = 1 / bat.rint;
-        s.g(P("+"), P("-"), g);
-        s.src(P("-"), P("+"), bat.v * g);
+        s.g(P(bat.p), P(bat.n), g);
+        s.src(P(bat.n), P(bat.p), bat.v(t) * g);
+        continue;
+      }
+      if (part.type === "vcc") {
+        const g = 1 / 0.01;
+        s.g(P("1"), -1, g);
+        s.src(-1, P("1"), (part.props.value ?? 5) * g);
         continue;
       }
       if (dead) continue;
       switch (part.type) {
         case "resistor":
           s.g(P("1"), P("2"), 1 / Math.max(0.1, part.props.value ?? 330));
+          break;
+        case "fuse":
+          s.g(P("1"), P("2"), 1 / 0.05);
           break;
         case "ldr":
           s.g(P("1"), P("2"), 1 / ldrOhms(inputs.ambient));
@@ -282,6 +428,10 @@ export class Simulator {
         case "switch":
           s.g(P("1"), P("2"), part.props.closed ? CLOSED : OPEN);
           break;
+        case "spdt":
+          s.g(P("COM"), P("A"), part.props.closed ? CLOSED : OPEN);
+          s.g(P("COM"), P("B"), part.props.closed ? OPEN : CLOSED);
+          break;
         case "buzzer":
           s.g(P("+"), P("-"), 1 / 360);
           break;
@@ -291,8 +441,24 @@ export class Simulator {
         case "diode":
           settled = this.diode(s, v, part.id, P("A"), P("K"), DIODE) && settled;
           break;
+        case "schottky":
+          settled = this.diode(s, v, part.id, P("A"), P("K"), SCHOTTKY) && settled;
+          break;
+        case "zener":
+          settled = this.diode(s, v, part.id, P("A"), P("K"), DIODE) && settled;
+          settled = this.diode(s, v, part.id + ":z", P("K"), P("A"), ZENER, zenerOffset(part.props.value ?? 5.1)) && settled;
+          break;
         case "npn":
-          settled = this.bjt(s, v, part.id, P("C"), P("B"), P("E")) && settled;
+          settled = this.bjt(s, v, part.id, P("C"), P("B"), P("E"), 1, BJT[part.props.variant ?? "2N2222"] ?? BJT["2N2222"]) && settled;
+          break;
+        case "pnp":
+          settled = this.bjt(s, v, part.id, P("C"), P("B"), P("E"), -1, BJT[part.props.variant ?? "BC557"] ?? BJT.BC557) && settled;
+          break;
+        case "nmos":
+          settled = this.mos(s, v, part.id, P("D"), P("G"), P("S"), 1, MOS[part.props.variant ?? "IRF540"] ?? MOS.IRF540) && settled;
+          break;
+        case "pmos":
+          settled = this.mos(s, v, part.id, P("D"), P("G"), P("S"), -1, MOS[part.props.variant ?? "IRF9540"] ?? MOS.IRF9540) && settled;
           break;
         case "ceramic":
         case "electrolytic": {
@@ -303,6 +469,165 @@ export class Simulator {
           s.src(b, a, g * (this.capV.get(part.id) ?? 0));
           break;
         }
+        case "inductor": {
+          const g = dt / Math.max(1e-9, part.props.value ?? 10e-3);
+          s.g(P("1"), P("2"), g);
+          s.src(P("1"), P("2"), this.mem.get(`L:${part.id}`)?.[0] ?? 0);
+          break;
+        }
+        case "transformer": {
+          const x = this.xfmr(part, dt);
+          const [p1, p2, s1, s2] = [P("P1"), P("P2"), P("S1"), P("S2")];
+          s.g(p1, p2, x.g11);
+          s.g(s1, s2, x.g22);
+          s.vccs(p1, p2, s1, s2, x.g12);
+          s.vccs(s1, s2, p1, p2, x.g12);
+          const [i1, i2] = this.mem.get(`T:${part.id}`) ?? [0, 0];
+          s.src(p1, p2, i1);
+          s.src(s1, s2, i2);
+          break;
+        }
+        case "isource": {
+          s.g(P("+"), P("-"), 1e-6);
+          s.src(P("-"), P("+"), part.props.value ?? 0.01);
+          break;
+        }
+        case "voltmeter":
+          s.g(P("+"), P("-"), 1e-7);
+          break;
+        case "ammeter":
+          s.g(P("+"), P("-"), 100);
+          break;
+        case "multimeter": {
+          const mode = part.props.mode ?? "V";
+          if (mode === "A") s.g(P("+"), P("COM"), 100);
+          else if (mode === "R") {
+            s.g(P("+"), P("COM"), 1e-3);
+            s.src(P("COM"), P("+"), 1e-3);
+          } else s.g(P("+"), P("COM"), 1e-7);
+          break;
+        }
+        case "scope":
+          s.g(P("A"), P("GND"), 1e-7);
+          s.g(P("B"), P("GND"), 1e-7);
+          break;
+        case "opamp": {
+          const [ip, im, o, vp, vn] = [P("+"), P("-"), P("OUT"), P("V+"), P("V-")];
+          s.g(vp, vn, 1 / 7000);
+          const A = 1e4;
+          const gout = 1 / 50;
+          const vd = U("+") - U("-");
+          const hi = U("V+") - 1.5;
+          const lo = U("V-");
+          const raw = A * vd;
+          const prev = this.junction.get(part.id);
+          let region = hi <= lo || raw <= lo ? -1 : raw >= hi ? 1 : 0;
+          // Never jump straight from one rail to the other: pass through the linear region so feedback can settle.
+          if (hi > lo && (prev === undefined || (prev !== 0 && region === -prev))) region = 0;
+          const T = region === -1 ? lo : region === 1 ? hi : raw;
+          const VO = U("OUT");
+          const terms: Term[] = [{ p: o, n: -1, g: gout, v0: VO }];
+          if (region === 0) terms.push({ p: ip, n: im, g: -gout * A, v0: vd });
+          else if (region === 1) terms.push({ p: vp, n: -1, g: -gout, v0: U("V+") });
+          else terms.push({ p: vn, n: -1, g: -gout, v0: U("V-") });
+          s.nl(o, gout * (VO - T), terms);
+          this.junction.set(part.id, region);
+          if (prev !== region) settled = false;
+          break;
+        }
+        case "lm7805":
+        case "ams1117": {
+          const r = this.regulator(part);
+          const [vin, g, o] = [P("IN"), P("GND"), P("OUT")];
+          s.g(vin, g, 1 / 2000);
+          const VIN = U("IN");
+          const VG = U("GND");
+          const VO = U("OUT");
+          const reg = VG + r.vout <= VIN - r.drop;
+          const T = reg ? VG + r.vout : VIN - r.drop;
+          const gout = 20;
+          const pass = T - VO > 0;
+          if (pass) {
+            const terms: Term[] = [{ p: o, n: -1, g: gout, v0: VO }, reg ? { p: g, n: -1, g: -gout, v0: VG } : { p: vin, n: -1, g: -gout, v0: VIN }];
+            s.nl(o, gout * (VO - T), terms);
+            s.nl(vin, gout * (T - VO), neg(terms));
+          }
+          const state = (reg ? 1 : 0) + (pass ? 2 : 0);
+          if (this.junction.get(part.id) !== state) settled = false;
+          this.junction.set(part.id, state);
+          break;
+        }
+        case "relay": {
+          const on = this.latch.get(part.id) ?? false;
+          s.g(P("1"), P("2"), 0.07 / (part.props.value ?? 5));
+          s.g(P("COM"), P("NO"), on ? CLOSED : OPEN);
+          s.g(P("COM"), P("NC"), on ? OPEN : CLOSED);
+          break;
+        }
+        case "opto": {
+          const [a, k, c, e] = [P("A"), P("K"), P("C"), P("E")];
+          settled = this.diode(s, v, part.id, a, k, OPTO_LED) && settled;
+          const vd = this.junction.get(part.id) ?? 0;
+          const nvt = OPTO_LED.n * VT;
+          const ex = Math.exp(Math.min(vd / nvt, 80));
+          const If = Math.max(0, OPTO_LED.is * (ex - 1));
+          const gd = If > 0 ? (OPTO_LED.is / nvt) * ex : 0;
+          const vce = U("C") - U("E");
+          // Saturation curve, continued as a straight line below 0 V so Newton can climb back from an overshoot.
+          const f = vce > 0 ? 1 - Math.exp(-vce / 0.15) : vce / 0.15;
+          const fp = vce > 0 ? Math.exp(-vce / 0.15) / 0.15 : 1 / 0.15;
+          const terms: Term[] = [
+            { p: a, n: k, g: OPTO_CTR * gd * f, v0: vd },
+            { p: c, n: e, g: OPTO_CTR * If * fp + GMIN, v0: vce },
+          ];
+          s.nl(c, OPTO_CTR * If * f, terms);
+          s.nl(e, -OPTO_CTR * If * f, neg(terms));
+          break;
+        }
+        case "sevenseg": {
+          const model = ledModel("red");
+          const ca = part.props.mode === "ca";
+          for (const seg of SEGMENTS) {
+            settled = (ca ? this.diode(s, v, `${part.id}:${seg}`, P("COM"), P(seg), model) : this.diode(s, v, `${part.id}:${seg}`, P(seg), P("COM"), model)) && settled;
+          }
+          break;
+        }
+        case "dcmotor":
+          s.g(P("+"), P("-"), 0.25 / (part.props.value ?? 6));
+          break;
+        case "servo":
+          s.g(P("V+"), P("GND"), 1 / 500);
+          s.g(P("SIG"), P("GND"), 1e-5);
+          break;
+        case "hc595": {
+          const g = P("GND");
+          const vs = U("VCC") - U("GND");
+          s.g(P("VCC"), g, 1 / 100000);
+          const [reg, out] = this.mem.get(`S:${part.id}`) ?? [0, 0];
+          const oe = U("OE") - U("GND") < vs / 2;
+          const drive = (pin: string, bit: number) => {
+            const q = P(pin);
+            s.g(q, g, 1 / 50);
+            s.src(g, q, (bit ? Math.max(0, vs) : 0) / 50);
+          };
+          if (vs > 2) {
+            if (oe) for (let i = 0; i < 8; i++) drive(`Q${i}`, (out >> i) & 1);
+            drive("Q7S", (reg >> 7) & 1);
+          }
+          break;
+        }
+        case "pcf8574": {
+          s.g(P("VCC"), P("GND"), 1 / 50000);
+          for (let i = 0; i < 8; i++) s.g(P(`P${i}`), P("VCC"), 1 / 40000);
+          break;
+        }
+        case "oled":
+          s.g(P("VCC"), P("GND"), 1 / 400);
+          break;
+        case "lcd1602":
+          s.g(P("VDD"), P("VSS"), 1 / 3300);
+          settled = this.diode(s, v, part.id, P("A"), P("K"), ledModel("white")) && settled;
+          break;
         case "timer555": {
           const gnd = P("1");
           const vs = this.V(v, P("8")) - this.V(v, gnd);
@@ -318,6 +643,20 @@ export class Simulator {
       }
     }
     return settled;
+  }
+
+  /** Coupled-inductor companion conductances for a transformer: 1 H primary, turns ratio n, coupling 0.99. */
+  private xfmr(part: Part, dt: number) {
+    const n = Math.max(0.01, part.props.value ?? 0.1);
+    const L1 = 1;
+    const L2 = n * n;
+    const M = 0.99 * Math.sqrt(L1 * L2);
+    const det = L1 * L2 - M * M;
+    return { n, g11: (dt * L2) / det, g22: (dt * L1) / det, g12: (-dt * M) / det };
+  }
+
+  private regulator(part: Part) {
+    return part.type === "lm7805" ? { vout: 5, drop: 2, imax: 1.5 } : { vout: Number(part.props.variant ?? 3.3) || 3.3, drop: 1.1, imax: 1 };
   }
 
   /** Advance the circuit by dt seconds. */
@@ -339,6 +678,74 @@ export class Simulator {
   }
 
   private afterStep(dt: number, inputs: SimInputs) {
+    const U = (part: Part, pin: string) => this.V(this.v, this.node(part, pin));
+    // Energy-storage and latch state first, so the snapshot below reports the new values.
+    for (const part of this.board.parts) {
+      if (this.burnt.has(part.id)) continue;
+      switch (part.type) {
+        case "inductor": {
+          const key = `L:${part.id}`;
+          const i = this.mem.get(key)?.[0] ?? 0;
+          this.mem.set(key, [i + (dt / Math.max(1e-9, part.props.value ?? 10e-3)) * (U(part, "1") - U(part, "2"))]);
+          break;
+        }
+        case "transformer": {
+          const x = this.xfmr(part, dt);
+          const key = `T:${part.id}`;
+          const [i1, i2] = this.mem.get(key) ?? [0, 0];
+          const v1 = U(part, "P1") - U(part, "P2");
+          const v2 = U(part, "S1") - U(part, "S2");
+          this.mem.set(key, [i1 + x.g11 * v1 + x.g12 * v2, i2 + x.g12 * v1 + x.g22 * v2]);
+          break;
+        }
+        case "relay": {
+          const ic = Math.abs(U(part, "1") - U(part, "2")) * (0.07 / (part.props.value ?? 5));
+          const on = this.latch.get(part.id) ?? false;
+          if (!on && ic > 0.75 * 0.07) this.latch.set(part.id, true);
+          else if (on && ic < 0.3 * 0.07) this.latch.set(part.id, false);
+          break;
+        }
+        case "servo": {
+          const key = `V:${part.id}`;
+          const [high, t0, width] = this.mem.get(key) ?? [0, 0, 0];
+          const sig = U(part, "SIG") - U(part, "GND") > 1.5 ? 1 : 0;
+          if (sig && !high) this.mem.set(key, [1, this.time, width]);
+          else if (!sig && high) this.mem.set(key, [0, t0, this.time - t0]);
+          break;
+        }
+        case "hc595": {
+          const key = `S:${part.id}`;
+          let [reg, out, clk, rclk] = this.mem.get(key) ?? [0, 0, 0, 0];
+          const vs = U(part, "VCC") - U(part, "GND");
+          const hi = (pin: string) => (U(part, pin) - U(part, "GND") > vs / 2 ? 1 : 0);
+          if (vs > 2) {
+            const c = hi("SRCLK");
+            const r = hi("RCLK");
+            if (!hi("SRCLR")) reg = 0;
+            else if (c && !clk) reg = ((reg << 1) | hi("SER")) & 0xff;
+            if (r && !rclk) out = reg;
+            clk = c;
+            rclk = r;
+          }
+          this.mem.set(key, [reg, out, clk, rclk]);
+          break;
+        }
+        case "scope": {
+          const key = `O:${part.id}`;
+          const buf = this.mem.get(key) ?? [0];
+          let acc = buf[0] + dt;
+          const a = U(part, "A") - U(part, "GND");
+          const b = U(part, "B") - U(part, "GND");
+          const samples = buf.slice(1);
+          while (acc >= SCOPE_DT) {
+            acc -= SCOPE_DT;
+            samples.push(a, b);
+          }
+          this.mem.set(key, [acc, ...samples.slice(-SCOPE_N * 2)]);
+          break;
+        }
+      }
+    }
     const snap = this.snapshot(inputs);
     for (const part of this.board.parts) {
       const P = (pin: string) => this.node(part, pin);
@@ -364,9 +771,8 @@ export class Simulator {
       }
       const st = snap.parts[part.id];
       if (!st) continue;
-      if (batteryOf(part.type)) {
-        const bat = batteryOf(part.type)!;
-        if (st.current > (0.6 * bat.v) / bat.rint) {
+      if (sourceOf(part) || part.type === "vcc") {
+        if (st.stress > 1) {
           if (!this.shorted.has(part.id)) {
             this.shorted.add(part.id);
             this.events.push({ type: "short", partId: part.id });
@@ -380,7 +786,7 @@ export class Simulator {
       }
       if (this.burnt.has(part.id)) continue;
       const d = this.damage.get(part.id) ?? { over: 0 };
-      const limit = part.type === "electrolytic" ? 1.5 : part.type === "led" ? 0.12 : 0.5;
+      const limit = part.type === "electrolytic" ? 1.5 : part.type === "led" || part.type === "sevenseg" ? 0.12 : part.type === "fuse" ? 0.05 : 0.5;
       if (st.stress > 1) {
         if (d.over === 0) this.events.push({ type: "overcurrent", partId: part.id, partType: part.type });
         d.over += dt;
@@ -430,14 +836,23 @@ export class Simulator {
         parts[part.id] = st;
         continue;
       }
-      const bat = batteryOf(part.type);
+      const bat = sourceOf(part);
       if (bat) {
-        const I = (bat.v - (V(part, "+") - V(part, "-"))) / bat.rint;
+        const I = (bat.v(this.time) - (V(part, bat.p) - V(part, bat.n))) / bat.rint;
         st.current = I;
-        st.pinCurrents = { "+": -I, "-": I };
+        st.pinCurrents = { [bat.p]: -I, [bat.n]: I };
         st.power = I * I * bat.rint;
-        st.stress = I / ((0.6 * bat.v) / bat.rint);
-        st.on = I > 1e-4;
+        st.stress = Math.abs(I) / bat.imax;
+        st.on = Math.abs(I) > 1e-4;
+        parts[part.id] = st;
+        continue;
+      }
+      if (part.type === "vcc") {
+        const I = ((part.props.value ?? 5) - V(part, "1")) / 0.01;
+        st.current = I;
+        st.pinCurrents = { "1": -I };
+        st.stress = Math.abs(I) / 10;
+        st.on = Math.abs(I) > 1e-4;
         parts[part.id] = st;
         continue;
       }
@@ -452,6 +867,10 @@ export class Simulator {
           st.stress = st.power / 0.25 / 2;
           break;
         }
+        case "fuse":
+          two("1", "2", (V(part, "1") - V(part, "2")) / 0.05);
+          st.stress = Math.abs(st.current) / (part.props.value ?? 0.5);
+          break;
         case "ldr":
           two("1", "2", (V(part, "1") - V(part, "2")) / ldrOhms(inputs.ambient));
           st.stress = st.power / 0.1 / 2;
@@ -477,6 +896,15 @@ export class Simulator {
           st.on = Boolean(part.props.closed);
           st.stress = Math.abs(st.current) / 1;
           break;
+        case "spdt": {
+          const ia = (V(part, "COM") - V(part, "A")) * (part.props.closed ? CLOSED : OPEN);
+          const ib = (V(part, "COM") - V(part, "B")) * (part.props.closed ? OPEN : CLOSED);
+          st.current = ia + ib;
+          st.pinCurrents = { COM: ia + ib, A: -ia, B: -ib };
+          st.on = Boolean(part.props.closed);
+          st.stress = Math.abs(st.current) / 1;
+          break;
+        }
         case "buzzer": {
           const vd = V(part, "+") - V(part, "-");
           two("+", "-", vd / 360);
@@ -486,32 +914,59 @@ export class Simulator {
           break;
         }
         case "led":
-        case "diode": {
-          const m = part.type === "led" ? ledModel(part.props.color) : DIODE;
+        case "diode":
+        case "schottky": {
+          const m = part.type === "led" ? ledModel(part.props.color) : part.type === "schottky" ? SCHOTTKY : DIODE;
           const vd = V(part, "A") - V(part, "K");
           const I = m.is * Math.expm1(Math.min(vd / (m.n * VT), 80));
           two("A", "K", I);
           if (part.type === "led") {
-            st.glow = I > 2e-4 ? Math.min(1, (I / 0.02) ** 0.6) : 0;
-            st.on = st.glow > 0;
+            st.glow = I > 2e-4 && part.props.color !== "ir" ? Math.min(1, (I / 0.02) ** 0.6) : 0;
+            st.on = I > 2e-4;
             st.stress = I / LED_BURN_A;
           } else st.stress = I / 1.5;
           st.reversed = vd < -1;
           break;
         }
-        case "npn": {
-          const vbe = V(part, "B") - V(part, "E");
-          const vbc = V(part, "B") - V(part, "C");
-          const iF = NPN.is * Math.expm1(Math.min(vbe / VT, 80));
-          const iR = NPN.is * Math.expm1(Math.min(vbc / VT, 80));
-          const Ic = iF - iR - iR / NPN.br;
-          const Ib = iF / NPN.bf + iR / NPN.br;
+        case "zener": {
+          const vd = V(part, "A") - V(part, "K");
+          const fwd = DIODE.is * Math.expm1(Math.min(vd / (DIODE.n * VT), 80));
+          const rev = ZENER.is * Math.expm1(Math.min((-vd - zenerOffset(part.props.value ?? 5.1)) / (ZENER.n * VT), 80));
+          two("A", "K", fwd - rev);
+          st.on = rev > 1e-4;
+          st.stress = st.power / 0.5;
+          break;
+        }
+        case "npn":
+        case "pnp": {
+          const sg = part.type === "npn" ? 1 : -1;
+          const m = BJT[part.props.variant ?? (sg === 1 ? "2N2222" : "BC557")] ?? BJT["2N2222"];
+          const vbe = sg * (V(part, "B") - V(part, "E"));
+          const vbc = sg * (V(part, "B") - V(part, "C"));
+          const iF = m.is * Math.expm1(Math.min(vbe / VT, 80));
+          const iR = m.is * Math.expm1(Math.min(vbc / VT, 80));
+          const Ic = iF - iR - iR / m.br;
+          const Ib = iF / m.bf + iR / m.br;
           st.current = Ic;
-          st.pinCurrents = { C: Ic, B: Ib, E: -(Ic + Ib) };
+          st.pinCurrents = { C: sg * Ic, B: sg * Ib, E: -sg * (Ic + Ib) };
           st.power = Math.abs(Ic * (V(part, "C") - V(part, "E")));
           st.on = Ic > 1e-4;
           st.reversed = Ic < -1e-3;
-          st.stress = Math.max(Ic / 0.8, st.power / 0.625);
+          st.stress = Math.max(Ic / m.imax, st.power / m.pmax);
+          break;
+        }
+        case "nmos":
+        case "pmos": {
+          const pol = part.type === "nmos" ? 1 : -1;
+          const m = MOS[part.props.variant ?? (pol === 1 ? "IRF540" : "IRF9540")] ?? MOS.IRF540;
+          const swapped = pol * (V(part, "D") - V(part, "S")) < 0;
+          const [d, src] = swapped ? ["S", "D"] : ["D", "S"];
+          const { id } = mosI(pol * (V(part, "G") - V(part, src)), pol * (V(part, d) - V(part, src)), m);
+          st.current = swapped ? -id : id;
+          st.pinCurrents = { [d]: pol * id, [src]: -pol * id, G: 0 };
+          st.power = Math.abs(id * (V(part, "D") - V(part, "S")));
+          st.on = id > 1e-4;
+          st.stress = Math.max(id / m.imax, st.power / m.pmax);
           break;
         }
         case "ceramic":
@@ -527,12 +982,211 @@ export class Simulator {
           }
           break;
         }
+        case "inductor": {
+          const I = this.mem.get(`L:${part.id}`)?.[0] ?? 0;
+          two("1", "2", I);
+          st.stress = Math.abs(I) / 1.5;
+          break;
+        }
+        case "transformer": {
+          const [i1, i2] = this.mem.get(`T:${part.id}`) ?? [0, 0];
+          const n = Math.max(0.01, part.props.value ?? 0.1);
+          st.current = i1;
+          st.pinCurrents = { P1: i1, P2: -i1, S1: i2, S2: -i2 };
+          st.on = Math.abs(V(part, "S1") - V(part, "S2")) > 0.05;
+          st.stress = Math.max(Math.abs(i1), Math.abs(i2) * n);
+          break;
+        }
+        case "isource": {
+          const I = part.props.value ?? 0.01;
+          st.current = I;
+          st.pinCurrents = { "+": -I, "-": I };
+          st.power = Math.abs(I * (V(part, "+") - V(part, "-")));
+          st.on = true;
+          break;
+        }
+        case "voltmeter":
+          two("+", "-", (V(part, "+") - V(part, "-")) * 1e-7);
+          st.reading = V(part, "+") - V(part, "-");
+          break;
+        case "ammeter":
+          two("+", "-", (V(part, "+") - V(part, "-")) * 100);
+          st.reading = st.current;
+          st.stress = Math.abs(st.current) / 10;
+          break;
+        case "multimeter": {
+          const vab = V(part, "+") - V(part, "COM");
+          const mode = part.props.mode ?? "V";
+          if (mode === "A") {
+            two("+", "COM", vab * 100);
+            st.reading = st.current;
+            st.stress = Math.abs(st.current) / 10;
+          } else if (mode === "R") {
+            const I = (1 - vab) / 1000;
+            st.current = -I;
+            st.pinCurrents = { "+": -I, COM: I };
+            st.reading = I > 1e-9 && vab >= 0 ? vab / I : Infinity;
+          } else {
+            two("+", "COM", vab * 1e-7);
+            st.reading = vab;
+          }
+          break;
+        }
+        case "scope": {
+          const buf = this.mem.get(`O:${part.id}`) ?? [0];
+          const a: number[] = [];
+          const b: number[] = [];
+          for (let i = 1; i + 1 < buf.length; i += 2) {
+            a.push(buf[i]);
+            b.push(buf[i + 1]);
+          }
+          st.wave = [a, b];
+          st.on = true;
+          st.pinCurrents = { A: (V(part, "A") - V(part, "GND")) * 1e-7, B: (V(part, "B") - V(part, "GND")) * 1e-7, GND: -(V(part, "A") + V(part, "B") - 2 * V(part, "GND")) * 1e-7 };
+          break;
+        }
+        case "opamp": {
+          const vd = V(part, "+") - V(part, "-");
+          const hi = V(part, "V+") - 1.5;
+          const lo = V(part, "V-");
+          const T = hi <= lo ? lo : Math.max(lo, Math.min(hi, 1e4 * vd));
+          const iOut = (V(part, "OUT") - T) / 50;
+          const iSup = (V(part, "V+") - V(part, "V-")) / 7000;
+          st.current = -iOut;
+          st.pinCurrents = { OUT: iOut, "V+": iSup, "V-": -iSup - iOut, "+": 0, "-": 0 };
+          st.on = V(part, "V+") - V(part, "V-") > 3;
+          st.power = Math.abs(iOut) * Math.abs(V(part, "V+") - V(part, "OUT")) + iSup * (V(part, "V+") - V(part, "V-"));
+          st.stress = (V(part, "V+") - V(part, "V-")) / 34;
+          break;
+        }
+        case "lm7805":
+        case "ams1117": {
+          const r = this.regulator(part);
+          const VIN = V(part, "IN");
+          const VG = V(part, "GND");
+          const VO = V(part, "OUT");
+          const T = Math.min(VG + r.vout, VIN - r.drop);
+          const I = Math.max(0, 20 * (T - VO));
+          const iq = (VIN - VG) / 2000;
+          st.current = I;
+          st.pinCurrents = { IN: I + iq, OUT: -I, GND: -iq };
+          st.power = I * Math.max(0, VIN - VO);
+          st.on = VO - VG > 0.5;
+          st.stress = Math.max(I / r.imax, st.power / 2, (VIN - VG) / (part.type === "lm7805" ? 35 : 15));
+          break;
+        }
+        case "relay": {
+          const rated = part.props.value ?? 5;
+          const on = this.latch.get(part.id) ?? false;
+          const ic = (V(part, "1") - V(part, "2")) * (0.07 / rated);
+          const ino = (V(part, "COM") - V(part, "NO")) * (on ? CLOSED : OPEN);
+          const inc = (V(part, "COM") - V(part, "NC")) * (on ? OPEN : CLOSED);
+          st.current = ic;
+          st.pinCurrents = { "1": ic, "2": -ic, COM: ino + inc, NO: -ino, NC: -inc };
+          st.power = Math.abs(ic * (V(part, "1") - V(part, "2")));
+          st.on = on;
+          st.stress = Math.max(Math.abs(V(part, "1") - V(part, "2")) / (1.5 * rated), Math.abs(ino + inc) / 10);
+          break;
+        }
+        case "opto": {
+          const vd = V(part, "A") - V(part, "K");
+          const If = Math.max(0, OPTO_LED.is * Math.expm1(Math.min(vd / (OPTO_LED.n * VT), 80)));
+          const vce = V(part, "C") - V(part, "E");
+          const Ic = OPTO_CTR * If * (vce > 0 ? 1 - Math.exp(-vce / 0.15) : vce / 0.15);
+          st.current = Ic;
+          st.pinCurrents = { A: If, K: -If, C: Ic, E: -Ic };
+          st.power = If * vd + Ic * Math.max(0, vce);
+          st.on = Ic > 1e-4;
+          st.reversed = vd < -1;
+          st.stress = Math.max(If / 0.06, Ic / 0.05);
+          break;
+        }
+        case "sevenseg": {
+          const m = ledModel("red");
+          const ca = part.props.mode === "ca";
+          const segs: number[] = [];
+          let total = 0;
+          let worst = 0;
+          for (const seg of SEGMENTS) {
+            const vd = ca ? V(part, "COM") - V(part, seg) : V(part, seg) - V(part, "COM");
+            const I = m.is * Math.expm1(Math.min(vd / (m.n * VT), 80));
+            segs.push(I > 2e-4 ? Math.min(1, (I / 0.02) ** 0.6) : 0);
+            st.pinCurrents[seg] = ca ? -I : I;
+            total += Math.max(0, I);
+            worst = Math.max(worst, I);
+          }
+          st.pinCurrents.COM = ca ? total : -total;
+          st.segs = segs;
+          st.current = total;
+          st.on = segs.some((g) => g > 0);
+          st.stress = worst / LED_BURN_A;
+          break;
+        }
+        case "dcmotor": {
+          const rated = part.props.value ?? 6;
+          const vd = V(part, "+") - V(part, "-");
+          two("+", "-", (vd * 0.25) / rated);
+          st.level = Math.min(1, Math.abs(vd) / rated);
+          st.on = st.level > 0.05;
+          st.phase = (((this.time * st.level * 3 * Math.sign(vd)) % 1) + 1) % 1;
+          st.stress = Math.abs(vd) / (1.6 * rated);
+          break;
+        }
+        case "servo": {
+          const vs = V(part, "V+") - V(part, "GND");
+          const width = this.mem.get(`V:${part.id}`)?.[2] ?? 0;
+          two("V+", "GND", vs / 500);
+          st.on = vs > 4 && vs < 7.2;
+          st.level = width > 0 ? Math.max(0, Math.min(1, (width - 0.001) / 0.001)) : 0.5;
+          st.stress = vs / 8;
+          break;
+        }
+        case "hc595": {
+          const vs = V(part, "VCC") - V(part, "GND");
+          const [, out] = this.mem.get(`S:${part.id}`) ?? [0, 0];
+          st.segs = Array.from({ length: 8 }, (_, i) => (out >> i) & 1);
+          st.on = vs > 2;
+          let iq = vs / 100000;
+          for (let i = 0; i < 8; i++) {
+            const qi = (V(part, `Q${i}`) - V(part, "GND") - (st.segs[i] && st.on ? vs : 0)) / 50;
+            st.pinCurrents[`Q${i}`] = qi;
+            iq -= qi;
+          }
+          st.pinCurrents.VCC = vs / 100000;
+          st.pinCurrents.GND = -iq;
+          st.stress = vs / 7;
+          break;
+        }
+        case "pcf8574": {
+          const vs = V(part, "VCC") - V(part, "GND");
+          st.on = vs > 2.5;
+          st.stress = vs / 7;
+          break;
+        }
+        case "oled": {
+          const vs = V(part, "VCC") - V(part, "GND");
+          two("VCC", "GND", vs / 400);
+          st.on = vs >= 2.8 && vs <= 5.5;
+          st.stress = vs / 6.5;
+          break;
+        }
+        case "lcd1602": {
+          const vs = V(part, "VDD") - V(part, "VSS");
+          const m = ledModel("white");
+          const ibl = Math.max(0, m.is * Math.expm1(Math.min((V(part, "A") - V(part, "K")) / (m.n * VT), 80)));
+          st.current = vs / 3300;
+          st.pinCurrents = { VDD: vs / 3300, VSS: -vs / 3300, A: ibl, K: -ibl };
+          st.on = vs >= 4.2 && vs <= 5.7;
+          st.level = ibl > 2e-4 ? Math.min(1, (ibl / 0.02) ** 0.6) : 0;
+          st.stress = Math.max(vs / 7, ibl / 0.06);
+          break;
+        }
         case "timer555": {
           const gnd = V(part, "1");
           const q = this.latch.get(part.id) ?? false;
           const vs = V(part, "8") - gnd;
           const target = q ? Math.max(0, vs - 1.7) : 0;
-          const iOut = ((V(part, "3") - gnd) - target) / 15;
+          const iOut = (V(part, "3") - gnd - target) / 15;
           const iDis = q ? 0 : (V(part, "7") - gnd) / 10;
           const iSup = vs / 20000;
           st.on = q;
@@ -549,7 +1203,6 @@ export class Simulator {
   }
 }
 
-/** Run a circuit to steady state, handy for checks and tests. */
 /** Run the circuit to steady state. Parts in `burnt` start burnt, as they are on the live board. */
 export function solveSteady(board: Board, inputs: Partial<SimInputs> = {}, seconds = 2, netlist?: Netlist, burnt?: ReadonlySet<string>): SimSnapshot | null {
   const sim = new Simulator(board, { burnt: new Set(burnt) }, netlist);

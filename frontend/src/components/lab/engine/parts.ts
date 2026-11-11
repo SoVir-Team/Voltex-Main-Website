@@ -1,4 +1,8 @@
 import type { LedColor, Part, PartProps, PartType, Pt, Rot } from "./types.ts";
+import { NEW_PARTS } from "./parts-extra.ts";
+import { choice, num, volts } from "./units.ts";
+
+export { choice, formatValue, num, parseSI, volts } from "./units.ts";
 
 export interface PinDef {
   id: string;
@@ -7,11 +11,16 @@ export interface PinDef {
   y: number;
 }
 
+/** An editable property shown in the inspector. Number fields accept SI suffixes such as 4.7k or 100n. */
+export type FieldDef =
+  | { kind: "number"; key: "value" | "freq" | "duty"; label: string; unit: string; presets: number[]; min: number; max: number; fallback: number }
+  | { kind: "choice"; key: "color" | "mode" | "variant"; label: string; options: { value: string; label: string }[]; fallback: string };
+
 export interface PartDef {
   type: PartType;
   name: string;
   prefix: string;
-  category: "Power" | "Passive" | "Indicator" | "Switch" | "Active";
+  category: "Power" | "Passive" | "Indicator" | "Switch" | "Active" | "Meter" | "Connector";
   pins: PinDef[];
   /** Body outline in grid units, relative to the part origin before rotation. */
   body: { x: number; y: number; w: number; h: number; round?: boolean };
@@ -21,6 +30,10 @@ export interface PartDef {
   learn: string;
   /** Short spec line, e.g. "9 V · 1.7 Ω internal". */
   spec: (p: PartProps) => string;
+  /** Values the student can change. */
+  fields?: FieldDef[];
+  /** Value text drawn next to the schematic symbol, e.g. "16 V" or "4.7 kΩ". */
+  label?: (p: PartProps) => string;
 }
 
 export const LED_SPECS: Record<LedColor, { vf: number; hex: string; label: string }> = {
@@ -29,6 +42,12 @@ export const LED_SPECS: Record<LedColor, { vf: number; hex: string; label: strin
   green: { vf: 2.2, hex: "#3bff7a", label: "Green" },
   blue: { vf: 3.0, hex: "#3b8bff", label: "Blue" },
   white: { vf: 3.1, hex: "#f4f7ff", label: "White" },
+  orange: { vf: 2.0, hex: "#ff8a1f", label: "Orange" },
+  amber: { vf: 2.1, hex: "#ffb31f", label: "Amber" },
+  pink: { vf: 3.0, hex: "#ff5fb4", label: "Pink" },
+  purple: { vf: 3.2, hex: "#a35bff", label: "Purple" },
+  uv: { vf: 3.4, hex: "#7a3bff", label: "Ultraviolet" },
+  ir: { vf: 1.3, hex: "#7a2a2a", label: "Infrared" },
 };
 
 /** Rated LED current; past LED_BURN_A for long enough it burns out. */
@@ -60,6 +79,7 @@ function trim(n: number, digits = 2): string {
   return String(Number(n.toFixed(digits)));
 }
 
+
 const BAND = ["#1a1a1a", "#7a4a1d", "#d42a2a", "#ef7d16", "#f2d21b", "#2c9c3f", "#2a5fd4", "#7c3fc4", "#8a8a8a", "#f7f7f7"];
 /** Colour bands for a resistor value: two digits, then the multiplier. */
 export function resistorBands(r: number): string[] {
@@ -73,7 +93,7 @@ export function resistorBands(r: number): string[] {
 export const PART_DEFS: Record<PartType, PartDef> = {
   battery9v: {
     type: "battery9v",
-    name: "9 V battery",
+    name: "Battery",
     prefix: "B",
     category: "Power",
     pins: [
@@ -81,14 +101,16 @@ export const PART_DEFS: Record<PartType, PartDef> = {
       { id: "-", label: "−", x: 0, y: 2 },
     ],
     body: { x: -6, y: -1, w: 5.2, h: 4 },
-    defaults: {},
+    defaults: { value: 9 },
     polarised: true,
-    learn: "A 9 V battery pushes current from + through your circuit back to −. Its small internal resistance means a short circuit dumps amps of current.",
-    spec: () => "9 V · 1.7 Ω internal",
+    learn: "A battery pushes current from + through your circuit back to −. Its small internal resistance means a short circuit dumps amps of current.",
+    spec: (p) => `${volts(p, 9)} · 1.7 Ω internal`,
+    fields: [num("value", "Voltage", "V", [1.5, 3, 4.5, 6, 9, 12], 9, 0.1, 48)],
+    label: (p) => volts(p, 9),
   },
   coincell: {
     type: "coincell",
-    name: "3 V coin cell",
+    name: "Coin cell",
     prefix: "B",
     category: "Power",
     pins: [
@@ -96,10 +118,12 @@ export const PART_DEFS: Record<PartType, PartDef> = {
       { id: "-", label: "−", x: 4, y: 0 },
     ],
     body: { x: -0.6, y: -2.2, w: 5.2, h: 4.4, round: true },
-    defaults: {},
+    defaults: { value: 3 },
     polarised: true,
     learn: "A CR2032 coin cell gives 3 V. Its internal resistance is high, which is why cheap LED keychains get away without a resistor.",
-    spec: () => "3 V · 30 Ω internal",
+    spec: (p) => `${volts(p, 3)} · 30 Ω internal`,
+    fields: [num("value", "Voltage", "V", [1.5, 3], 3, 0.1, 12)],
+    label: (p) => volts(p, 3),
   },
   resistor: {
     type: "resistor",
@@ -114,6 +138,8 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     defaults: { value: 330 },
     learn: "A resistor limits current. Ohm's law: current = voltage ÷ resistance. Read the colour bands: two digits, then how many zeros.",
     spec: (p) => `${formatOhms(p.value ?? 330)} · ¼ W`,
+    fields: [num("value", "Resistance", "Ω", RESISTOR_VALUES, 330, 0.1, 100e6)],
+    label: (p) => formatOhms(p.value ?? 330),
   },
   led: {
     type: "led",
@@ -129,6 +155,8 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     polarised: true,
     learn: "An LED only conducts from anode (long leg, A) to cathode (flat side, K). It needs a series resistor: R = (supply − LED voltage) ÷ 20 mA.",
     spec: (p) => `${LED_SPECS[p.color ?? "red"].label} · Vf ${LED_SPECS[p.color ?? "red"].vf} V · 20 mA`,
+    fields: [{ kind: "choice", key: "color", label: "Colour", fallback: "red", options: (Object.keys(LED_SPECS) as LedColor[]).map((c) => ({ value: c, label: `${LED_SPECS[c].label} · ${LED_SPECS[c].vf} V` })) }],
+    label: (p) => LED_SPECS[p.color ?? "red"].label,
   },
   diode: {
     type: "diode",
@@ -144,10 +172,11 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     polarised: true,
     learn: "A diode is a one-way valve for current. The band marks the cathode. It drops about 0.7 V when conducting.",
     spec: () => "1 A · 0.7 V drop",
+    label: () => "1N4007",
   },
   ceramic: {
     type: "ceramic",
-    name: "Ceramic capacitor",
+    name: "Capacitor",
     prefix: "C",
     category: "Passive",
     pins: [
@@ -158,10 +187,12 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     defaults: { value: 100e-9 },
     learn: "A capacitor stores charge. Small ceramic ones sit next to chips as decoupling, smoothing out quick dips in the supply.",
     spec: (p) => `${formatFarads(p.value ?? 100e-9)} · not polarised`,
+    fields: [num("value", "Capacitance", "F", CAP_VALUES.filter((v) => v <= 1e-6), 100e-9, 1e-12, 10e-6)],
+    label: (p) => formatFarads(p.value ?? 100e-9),
   },
   electrolytic: {
     type: "electrolytic",
-    name: "Electrolytic capacitor",
+    name: "Polarized capacitor",
     prefix: "C",
     category: "Passive",
     pins: [
@@ -173,6 +204,8 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     polarised: true,
     learn: "Electrolytic capacitors hold a lot of charge but have polarity. The stripe marks −. Fit one backwards and it can bulge or pop.",
     spec: (p) => `${formatFarads(p.value ?? 10e-6)} · 25 V · polarised`,
+    fields: [num("value", "Capacitance", "F", CAP_VALUES.filter((v) => v >= 1e-6), 10e-6, 0.1e-6, 0.1)],
+    label: (p) => formatFarads(p.value ?? 10e-6),
   },
   button: {
     type: "button",
@@ -190,7 +223,7 @@ export const PART_DEFS: Record<PartType, PartDef> = {
   },
   switch: {
     type: "switch",
-    name: "Slide switch",
+    name: "Switch (SPST)",
     prefix: "SW",
     category: "Switch",
     pins: [
@@ -216,10 +249,12 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     defaults: { value: 10000, pos: 0.5 },
     learn: "A potentiometer is a resistor with a sliding middle contact (W). Turn it to make any voltage between its two ends.",
     spec: (p) => `${formatOhms(p.value ?? 10000)} · linear`,
+    fields: [num("value", "Resistance", "Ω", [1000, 5000, 10000, 50000, 100000, 1000000], 10000, 10, 10e6)],
+    label: (p) => formatOhms(p.value ?? 10000),
   },
   npn: {
     type: "npn",
-    name: "NPN transistor 2N2222",
+    name: "NPN transistor",
     prefix: "Q",
     category: "Active",
     pins: [
@@ -228,9 +263,11 @@ export const PART_DEFS: Record<PartType, PartDef> = {
       { id: "C", label: "C", x: 2, y: 0 },
     ],
     body: { x: -0.4, y: -1.6, w: 2.8, h: 1.4 },
-    defaults: {},
+    defaults: { variant: "2N2222" },
     learn: "A small current into the base (B) lets a much bigger current flow from collector (C) to emitter (E). It is an electronic switch and an amplifier.",
-    spec: () => "β ≈ 150 · 600 mA",
+    spec: (p) => (p.variant === "BC547" ? "β ≈ 300 · 100 mA" : "β ≈ 150 · 600 mA"),
+    fields: [choice("variant", "Model", [["2N2222", "2N2222"], ["BC547", "BC547"]])],
+    label: (p) => p.variant ?? "2N2222",
   },
   ldr: {
     type: "ldr",
@@ -245,6 +282,7 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     defaults: {},
     learn: "A light-dependent resistor drops from about 1 MΩ in the dark to about 1 kΩ in bright light. Use the light slider to test it.",
     spec: () => "1 kΩ bright · 1 MΩ dark",
+    label: () => "LDR",
   },
   buzzer: {
     type: "buzzer",
@@ -260,6 +298,7 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     polarised: true,
     learn: "An active buzzer has its own oscillator inside: give it 3 to 12 V the right way round and it beeps.",
     spec: () => "3–12 V · 25 mA",
+    label: () => "Buzzer",
   },
   timer555: {
     type: "timer555",
@@ -280,10 +319,61 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     defaults: {},
     learn: "The 555 timer flips its output when a capacitor charges past ⅔ of the supply and back when it falls below ⅓. Two resistors and a capacitor set the blink rate.",
     spec: () => "4.5–15 V · 200 mA out",
+    label: () => "NE555",
   },
+  ...NEW_PARTS,
 };
 
-export const PALETTE: PartType[] = ["battery9v", "coincell", "resistor", "led", "button", "switch", "pot", "ldr", "npn", "ceramic", "electrolytic", "diode", "buzzer", "timer555"];
+export const PALETTE: PartType[] = [
+  "battery9v",
+  "coincell",
+  "dcsource",
+  "acsource",
+  "pulsegen",
+  "isource",
+  "vcc",
+  "gnd",
+  "resistor",
+  "led",
+  "button",
+  "switch",
+  "spdt",
+  "pot",
+  "ldr",
+  "npn",
+  "pnp",
+  "nmos",
+  "pmos",
+  "ceramic",
+  "electrolytic",
+  "inductor",
+  "diode",
+  "schottky",
+  "zener",
+  "fuse",
+  "buzzer",
+  "timer555",
+  "opamp",
+  "lm7805",
+  "ams1117",
+  "relay",
+  "opto",
+  "transformer",
+  "sevenseg",
+  "dcmotor",
+  "servo",
+  "hc595",
+  "pcf8574",
+  "oled",
+  "lcd1602",
+  "voltmeter",
+  "ammeter",
+  "multimeter",
+  "scope",
+  "header",
+  "usb",
+  "screwterm",
+];
 
 export function rotatePt(p: Pt, rot: Rot): Pt {
   switch (rot) {

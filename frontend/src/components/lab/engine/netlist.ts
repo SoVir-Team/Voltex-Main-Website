@@ -113,6 +113,18 @@ export function buildNetlist(board: Board): Netlist {
       if (copperGap(a, b) < -1e-6) uf.union(i, j);
     }
   }
+  // Power symbols are global labels: every ground is one node, and so is every VCC of the same voltage.
+  const types = new Map(board.parts.map((p) => [p.id, p]));
+  const labels = new Map<string, number>();
+  copper.forEach((c, i) => {
+    if (c.kind !== "pad") return;
+    const part = types.get(c.partId);
+    const key = part?.type === "gnd" ? "gnd" : part?.type === "vcc" ? `vcc:${part.props.value ?? 5}` : null;
+    if (!key) return;
+    const first = labels.get(key);
+    if (first === undefined) labels.set(key, i);
+    else uf.union(i, first);
+  });
   const groups = new Map<number, Copper[]>();
   copper.forEach((c, i) => {
     const root = uf.find(i);

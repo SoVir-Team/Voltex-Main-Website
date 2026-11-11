@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type PointerEvent as RPointerEvent, type RefObject } from "react";
-import { segmentCurrents } from "../engine/drc.ts";
+import { segmentCurrents, type DrcIssue } from "../engine/drc.ts";
 import { VIA_R, netAt, pointSegDist, type Netlist } from "../engine/netlist.ts";
 import { routeLeg } from "../engine/router.ts";
 import { partBox, pinPositions } from "../engine/parts.ts";
@@ -70,6 +70,8 @@ export function BoardCanvas({
   guides,
   focus,
   hotParts,
+  marks,
+  onIssue,
   svgRef,
   onPress,
   onProbe,
@@ -83,6 +85,9 @@ export function BoardCanvas({
   guides: [Pt, Pt][];
   focus: Pt | null;
   hotParts: Set<string>;
+  /** Problems found by the last Check, marked on the board. */
+  marks: DrcIssue[];
+  onIssue: (issue: DrcIssue) => void;
   svgRef: RefObject<SVGSVGElement | null>;
   onPress: (id: string, down: boolean) => void;
   onProbe: (r: ProbeReading | null, pins: string[]) => void;
@@ -92,6 +97,8 @@ export function BoardCanvas({
 }) {
   const { board, view } = state;
   const skin = SKIN[view];
+  // Overlay ink: dark on the white design sheet, white on the green fab board.
+  const ink = view === "fab" ? "#ffffff" : "#1d1d40";
   const [cursor, setCursor] = useState<Pt | null>(null);
   const [panning, setPanning] = useState(false);
   const [vb, setVb] = useState(() => ({ x: -2, y: -2, w: board.w + 4, h: board.h + 4 }));
@@ -188,7 +195,7 @@ export function BoardCanvas({
             drag.current = { kind: "press", id: hit.part.id };
             return;
           }
-          if (state.powered && hit.part.type === "switch") {
+          if (state.powered && (hit.part.type === "switch" || hit.part.type === "spdt")) {
             dispatch({ type: "props", id: hit.part.id, props: { closed: !hit.part.props.closed }, history: false });
             return;
           }
@@ -328,7 +335,7 @@ export function BoardCanvas({
                   key={t.id}
                   points={t.points.map((p) => `${p.x},${p.y}`).join(" ")}
                   fill="none"
-                  stroke={sel ? "#ffffff" : layerColor(layer)}
+                  stroke={sel ? (view === "fab" ? "#ffffff" : "#7c3aed") : layerColor(layer)}
                   strokeWidth={t.width / MM}
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -340,7 +347,7 @@ export function BoardCanvas({
 
       {board.vias.map((v) => (
         <g key={v.id}>
-          <circle cx={v.x} cy={v.y} r={VIA_R / MM} fill={skin.pad} stroke={state.selection?.id === v.id ? "#fff" : "none"} strokeWidth={0.08} />
+          <circle cx={v.x} cy={v.y} r={VIA_R / MM} fill={skin.pad} stroke={state.selection?.id === v.id ? ink : "none"} strokeWidth={0.08} />
           <circle cx={v.x} cy={v.y} r={0.2 / MM} fill={skin.drill} />
         </g>
       ))}
@@ -364,8 +371,8 @@ export function BoardCanvas({
               y1={c.a.y / MM}
               x2={c.b.x / MM}
               y2={c.b.y / MM}
-              stroke="#ffffff"
-              strokeOpacity={0.85}
+              stroke={ink}
+              strokeOpacity={0.75}
               strokeWidth={Math.min(0.18, c.r / MM)}
               strokeLinecap="round"
               strokeDasharray="0.08 0.92"
@@ -388,7 +395,7 @@ export function BoardCanvas({
 
       {/* Ratsnest: connections the schematic wants but the copper doesn't make yet. */}
       {view === "design" &&
-        guides.map(([a, b], i) => <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#f3f6fb" strokeOpacity={0.55} strokeWidth={0.07} strokeDasharray="0.25 0.2" pointerEvents="none" />)}
+        guides.map(([a, b], i) => <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#4d5175" strokeOpacity={0.7} strokeWidth={0.07} strokeDasharray="0.25 0.2" pointerEvents="none" />)}
 
       {routingPreview && (
         <polyline
@@ -403,13 +410,46 @@ export function BoardCanvas({
         />
       )}
       {cursor && (state.tool === "trace" || state.tool === "via") && !state.placing && (
-        <circle cx={snapRoute(cursor).x} cy={snapRoute(cursor).y} r={0.22} fill="none" stroke="#fff" strokeWidth={0.06} pointerEvents="none" />
+        <circle cx={snapRoute(cursor).x} cy={snapRoute(cursor).y} r={0.22} fill="none" stroke={ink} strokeWidth={0.06} pointerEvents="none" />
       )}
       {state.placing && cursor && (
         <g opacity={0.6} pointerEvents="none">
           <PartGlyph part={{ id: "?", type: state.placing, x: Math.round(cursor.x), y: Math.round(cursor.y), rot: 0, props: {} }} skin={skin} view="design" selected={false} />
         </g>
       )}
+      {/* Check results: a ring around each part with a problem and a badge to click for the details. */}
+      {marks.map((d, k) => {
+        const colour = d.severity === "error" ? "#d42a2a" : "#c27400";
+        const boxes = d.partIds.flatMap((id) => {
+          const p = board.parts.find((q) => q.id === id);
+          return p ? [partBox(p)] : [];
+        });
+        const at = boxes.length ? { x: boxes[0].x + boxes[0].w + 0.2, y: boxes[0].y - 0.2 } : d.at;
+        const nth = marks.slice(0, k).filter((o) => o.partIds[0] !== undefined && o.partIds[0] === d.partIds[0]).length;
+        return (
+          <g key={`${d.code}-${k}`}>
+            {boxes.map((b, i) => (
+              <rect key={i} x={b.x - 0.3} y={b.y - 0.3} width={b.w + 0.6} height={b.h + 0.6} rx={0.4} fill={colour} fillOpacity={0.06} stroke={colour} strokeWidth={0.12} strokeDasharray={d.severity === "error" ? undefined : "0.4 0.25"} pointerEvents="none" />
+            ))}
+            {!boxes.length && <circle cx={at.x} cy={at.y} r={0.9} fill="none" stroke={colour} strokeWidth={0.12} pointerEvents="none" />}
+            <g
+              className="cursor-pointer"
+              role="button"
+              aria-label={`${d.severity}: ${d.message}`}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onIssue(d);
+              }}
+            >
+              <title>{d.message}</title>
+              <circle cx={at.x + nth * 0.95} cy={at.y} r={0.42} fill={colour} stroke="#fff" strokeWidth={0.08} />
+              <text x={at.x + nth * 0.95} y={at.y} fontSize={0.6} fontWeight={800} fill="#fff" textAnchor="middle" dominantBaseline="central">
+                {d.severity === "error" ? "!" : "?"}
+              </text>
+            </g>
+          </g>
+        );
+      })}
       {focus && <circle cx={focus.x} cy={focus.y} r={1.6} fill="none" stroke="#ff6b4a" strokeWidth={0.15} className="lab-focus" pointerEvents="none" />}
       <title>Student Lab board</title>
     </svg>

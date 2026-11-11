@@ -19,18 +19,62 @@ export type PartType =
   | "npn"
   | "ldr"
   | "buzzer"
-  | "timer555";
+  | "timer555"
+  | "dcsource"
+  | "gnd"
+  | "vcc"
+  | "inductor"
+  | "spdt"
+  | "schottky"
+  | "zener"
+  | "fuse"
+  | "acsource"
+  | "pulsegen"
+  | "isource"
+  | "voltmeter"
+  | "ammeter"
+  | "multimeter"
+  | "scope"
+  | "pnp"
+  | "nmos"
+  | "pmos"
+  | "opamp"
+  | "lm7805"
+  | "ams1117"
+  | "relay"
+  | "opto"
+  | "transformer"
+  | "sevenseg"
+  | "dcmotor"
+  | "servo"
+  | "hc595"
+  | "pcf8574"
+  | "oled"
+  | "lcd1602"
+  | "header"
+  | "usb"
+  | "screwterm";
 
-export type LedColor = "red" | "green" | "blue" | "white" | "yellow";
+export type LedColor = "red" | "green" | "blue" | "white" | "yellow" | "orange" | "amber" | "pink" | "purple" | "uv" | "ir";
 
 export interface PartProps {
-  /** Ohms for resistors and pots, farads for capacitors. */
+  /**
+   * The part's main value: ohms for resistors and pots, farads for capacitors, henries for inductors, volts for
+   * sources, amps for current sources and fuses, the turns ratio for a transformer.
+   */
   value?: number;
   color?: LedColor;
-  /** Switch or button contact closed. */
+  /** Switch or button contact closed. For an SPDT switch, true means COM is thrown to A. */
   closed?: boolean;
   /** Potentiometer wiper position, 0..1. */
   pos?: number;
+  /** Frequency in hertz for AC and pulse sources. */
+  freq?: number;
+  /** Pulse duty cycle in percent. */
+  duty?: number;
+  /** Multimeter function, a part model (e.g. "BC547"), or 7-segment wiring ("cc" or "ca"). */
+  mode?: string;
+  variant?: string;
 }
 
 export interface Part {

@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 const Lab = dynamic(() => import("../ui/Lab.tsx"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-[min(86svh,860px)] min-h-[640px] items-center justify-center bg-ink-deep text-on-ink-muted" role="status">
+    <div className="flex h-[min(86svh,860px)] min-h-[640px] items-center justify-center bg-white text-muted" role="status">
       Loading the lab…
     </div>
   ),
