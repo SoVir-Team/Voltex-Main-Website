@@ -1,6 +1,7 @@
 import { copperGap, sharesLayer, type Netlist } from "./netlist.ts";
 import { PART_DEFS, partBox } from "./parts.ts";
 import { sourceOf, type SimSnapshot } from "./solver.ts";
+import { BOARDS, isMcu } from "./mcu-boards.ts";
 import type { Board, Pt } from "./types.ts";
 import { MM } from "./types.ts";
 
@@ -15,7 +16,9 @@ export type DrcCode =
   | "overlap"
   | "edge"
   | "acute-angle"
-  | "reset-floating";
+  | "reset-floating"
+  | "pin-voltage"
+  | "pin-rail";
 
 export interface DrcIssue {
   code: DrcCode;
@@ -113,6 +116,8 @@ export function runDrc(board: Board, nl: Netlist, snap: SimSnapshot | null): Drc
 
   // Unconnected pins, ignoring the 555 control pin which is normally left alone.
   for (const part of board.parts) {
+    // A board's spare header pins are normal; only its wiring is checked below.
+    if (isMcu(part.type)) continue;
     for (const pin of PART_DEFS[part.type].pins) {
       if (part.type === "timer555" && pin.id === "5") continue;
       const net = nl.netOf.get(`${part.id}.${pin.id}`);
@@ -150,6 +155,38 @@ export function runDrc(board: Board, nl: Netlist, snap: SimSnapshot | null): Drc
       const rst = (snap.netV[nl.netOf.get(`${part.id}.4`) ?? 0] ?? 0) - gnd;
       const vs = (snap.netV[nl.netOf.get(`${part.id}.8`) ?? 0] ?? 0) - gnd;
       if (vs > 3 && rst < 0.7) issues.push({ code: "reset-floating", severity: "error", message: `${part.id} RESET is low. Tie pin 4 to VCC.`, at: at(part.id), partIds: [part.id] });
+    }
+  }
+
+  // Microcontroller pins: a GPIO must stay within its supply, and one wired straight to a rail shorts as soon as
+  // the program drives it the other way.
+  for (const part of board.parts) {
+    if (!isMcu(part.type)) continue;
+    const spec = BOARDS[part.type];
+    const netV = (pin: string) => snap.netV[nl.netOf.get(`${part.id}.${pin}`) ?? -1] ?? 0;
+    const gndNet = nl.netOf.get(`${part.id}.${spec.gnd}`);
+    const railNets = new Map(spec.rails.map((r) => [nl.netOf.get(`${part.id}.${r.pin}`), r.pin]));
+    for (const io of spec.gpio) {
+      const net = nl.netOf.get(`${part.id}.${io.id}`);
+      if (net === undefined || nl.nets[net].pins.length === 1) continue;
+      const v = netV(io.id) - netV(spec.gnd);
+      if (v > spec.vcc + 0.5 || v < -0.5) {
+        issues.push({
+          code: "pin-voltage",
+          severity: "error",
+          message: `${part.id} pin ${io.id} sees ${v.toFixed(1)} V. The ${spec.name}'s pins take ${spec.vcc} V at most${spec.vcc < 5 ? ": never connect 5 V to them" : ""}.`,
+          at: at(part.id),
+          partIds: [part.id],
+        });
+      } else if (net === gndNet || railNets.has(net)) {
+        issues.push({
+          code: "pin-rail",
+          severity: "warning",
+          message: `${part.id} pin ${io.id} is wired straight to ${net === gndNet ? "GND" : railNets.get(net)}. If your program makes it an output driving the other way, the pin shorts. Use a resistor, or read it as an input only.`,
+          at: at(part.id),
+          partIds: [part.id],
+        });
+      }
     }
   }
 

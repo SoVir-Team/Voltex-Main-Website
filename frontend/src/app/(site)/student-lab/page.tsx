@@ -4,17 +4,14 @@ import { Reveal } from "@/components/motion/Reveal";
 import { ClosingCta } from "@/components/home/ClosingCta";
 import { Faq } from "@/components/home/Faq";
 import { HeroCircuit } from "@/components/lab/page/HeroCircuit";
-import { LabLoader } from "@/components/lab/page/LabLoader";
+import { LabCards } from "@/components/lab/page/LabCards";
 import { LedCalculator, OhmCalculator, TraceCalculator } from "@/components/lab/page/Calculators";
 import { BoardStage, type Stage } from "@/components/lab/page/BoardStages";
-import { MISSIONS } from "@/components/lab/engine/missions";
-import { PROJECTS } from "@/components/lab/engine/projects";
-import { PALETTE } from "@/components/lab/engine/parts";
 
 export const metadata: Metadata = {
   title: "Student Lab",
   description:
-    "A free PCB simulator for engineering, diploma and college students. Place real parts, route copper, run a live circuit simulation and pass a design-rule check, with Volta, your lab partner, correcting mistakes as you go.",
+    "Free electronics labs for engineering, diploma and college students: design circuit boards, program Arduino and Raspberry Pi Pico boards that run your real code, and work through guided ESP32 labs, all in the browser.",
   alternates: { canonical: "/student-lab" },
 };
 
@@ -29,7 +26,8 @@ const STAGES: { stage: Stage; name: string; text: string }[] = [
 
 const STUDENT_FAQ = [
   { q: "Do I need to install anything?", a: "No. The lab runs in your browser and saves your boards on this device. A laptop or tablet works best; a phone works for the missions." },
-  { q: "How real is the simulation?", a: "It solves the circuit with the same nodal analysis method SPICE uses, with real models for LEDs, diodes and transistors and a timing model for the 555. Values match hand calculations, so the maths you learn in class applies." },
+  { q: "How real is the simulation?", a: "The PCB Lab solves the circuit with the same nodal analysis method SPICE uses, with real models for LEDs, diodes and transistors. In the Microcontroller Lab your program is compiled and run instruction by instruction on an emulated chip, and its pins drive that same circuit solver. The ESP32 Labs are guided lessons: their simulators are models of what each lab's firmware does, and we label them that way." },
+  { q: "Which boards can I program?", a: "Arduino Uno in Arduino C++, and Raspberry Pi Pico in Arduino C++ or MicroPython. The ESP32 Labs follow the ESP32-S3 DevKitC-1, so you can repeat them on a real board." },
   { q: "Is it free?", a: "Yes, for every student. There is no sign-up and nothing to buy." },
   { q: "Can Voltex make the board I designed?", a: "Yes. When your design passes its checks and you want it made for a project or a competition, send us your idea and an engineer will reply within one working day." },
   { q: "I'm a teacher. Can I use it in class?", a: "Please do. Each mission takes ten to twenty minutes and ends with a clear checklist, which works well for lab sessions." },
@@ -42,17 +40,17 @@ export default function StudentLabPage() {
         <div className="frame grid-12 gap-y-10 pt-[clamp(3rem,6vw,6rem)] pb-[clamp(3rem,5vw,5rem)] lg:min-h-[78svh] lg:items-center">
           <div className="col-span-12 lg:col-span-5">
             <h1 id="lab-title" className="display rise-in text-[clamp(3rem,1.4rem+5.2vw,6.8rem)]">
-              Design your first PCB. Break it safely.
+              Build real electronics. Break them safely.
             </h1>
             <p className="rise-in mt-8 max-w-[30rem] text-lead text-on-ink-muted" style={{ ["--d" as string]: 2 }}>
-              A free circuit-board lab for engineering, diploma and college students. Place real parts, route copper, power it on and watch the current flow. Volta tells you when something is about to burn.
+              Free labs for engineering, diploma and college students. Design a circuit board, program a microcontroller that runs your real code, or work through guided ESP32 projects. Everything runs in your browser.
             </p>
             <div className="rise-in mt-10 flex flex-col gap-3 sm:flex-row" style={{ ["--d" as string]: 3 }}>
-              <ButtonLink href="#lab" variant="bolt" arrow className="min-h-14 px-8">
-                Start building
+              <ButtonLink href="#labs" variant="bolt" arrow className="min-h-14 px-8">
+                Choose a lab
               </ButtonLink>
-              <ButtonLink href="#builds" variant="light" className="min-h-14 px-8">
-                See what you can build
+              <ButtonLink href="/student-lab/pcb" variant="light" className="min-h-14 px-8">
+                Open the PCB Lab
               </ButtonLink>
             </div>
           </div>
@@ -62,60 +60,7 @@ export default function StudentLabPage() {
         </div>
       </section>
 
-      <section id="lab" aria-labelledby="the-lab" className="scroll-mt-20 bg-ink-deep text-on-ink">
-        <div className="frame pt-[clamp(3rem,6vw,5rem)] pb-6">
-          <div className="grid-12 gap-y-4">
-            <h2 id="the-lab" className="col-span-12 display text-[clamp(2.2rem,1.4rem+3vw,4.2rem)] lg:col-span-6">
-              The lab
-            </h2>
-            <p className="col-span-12 max-w-[36rem] self-end text-on-ink-muted lg:col-span-6">
-              Pick a part, click to place it, then route traces between pads with the trace tool. Flip the power switch to simulate. Shortcuts: T trace, V via while routing, L layer, R rotate, P probe, F fab view.
-            </p>
-          </div>
-        </div>
-        <div className="frame pb-[clamp(3rem,6vw,5rem)]">
-          <LabLoader />
-        </div>
-      </section>
-
-      <Reveal as="section" className="frame section-gap">
-        <div id="builds" className="grid-12 scroll-mt-24 gap-y-6">
-          <h2 data-reveal className="col-span-12 display text-[clamp(2.4rem,1.4rem+3.6vw,5rem)] lg:col-span-7">
-            {MISSIONS.length + PROJECTS.length} things to build
-          </h2>
-          <p data-reveal className="col-span-12 max-w-[30rem] self-end text-lead text-muted lg:col-span-4 lg:col-start-9">
-            Start with the missions, then pick anything from the project library. Free build unlocks all {PALETTE.length} parts.
-          </p>
-        </div>
-        <div className="grid-12 mt-16 gap-y-14">
-          <div className="col-span-12 lg:col-span-5">
-            <h3 data-reveal className="text-heading font-bold">
-              Missions
-            </h3>
-            <ol className="mt-6">
-              {MISSIONS.map((m) => (
-                <li key={m.id} data-reveal className="flex items-baseline justify-between gap-6 bg-surface px-5 py-4 even:bg-ground">
-                  <span className="text-[1.15rem] font-bold text-ink">{m.title}</span>
-                  <span className="text-right text-small text-muted">{m.skill}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-          <div className="col-span-12 lg:col-span-6 lg:col-start-7">
-            <h3 data-reveal className="text-heading font-bold">
-              Project library
-            </h3>
-            <ul className="mt-6 columns-1 gap-x-8 sm:columns-2">
-              {PROJECTS.map((p) => (
-                <li key={p.id} data-reveal className="mb-6 break-inside-avoid">
-                  <span className="block text-[1.15rem] font-bold text-ink">{p.title}</span>
-                  <span className="block text-muted">{p.brief.split(". ")[0]}.</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </Reveal>
+      <LabCards />
 
       <Reveal as="section" className="bg-surface">
         <div className="frame section-gap">

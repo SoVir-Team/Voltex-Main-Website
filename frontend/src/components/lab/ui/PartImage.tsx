@@ -5,6 +5,7 @@ import type { Part, PartType } from "../engine/types.ts";
 import { MM } from "../engine/types.ts";
 import { PAD_R } from "../engine/netlist.ts";
 import { SKIN, type Skin } from "./PartGlyph.tsx";
+import { McuBoardIcon } from "./BoardArt.tsx";
 
 /**
  * Pictures of parts for the Parts list, so students recognise them by sight. On the board the same parts are
@@ -457,6 +458,9 @@ function NewImage({ type }: { type: PartType }): ReactNode {
           <rect x={2} y={5.2} width={6} height={1.2} fill="#f3f4f6" />
         </g>
       );
+    case "uno":
+    case "pico":
+      return <McuBoardIcon type={type} />;
     case "screwterm":
       return (
         <g>

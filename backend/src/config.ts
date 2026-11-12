@@ -16,6 +16,12 @@ const schema = z.object({
   ADMIN_PASSWORD: z.string().optional(),
   /** Number of proxies in front of the app (Nginx = 1), so rate limits see the real client IP. */
   TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+  /** Student Lab compiler: the arduino-cli binary and its data/user directories. Leave unset to disable compiling. */
+  ARDUINO_CLI: z.string().optional(),
+  ARDUINO_DATA_DIR: z.string().optional(),
+  ARDUINO_USER_DIR: z.string().optional(),
+  COMPILE_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+  COMPILE_CONCURRENCY: z.coerce.number().int().positive().default(2),
 });
 
 const parsed = schema.safeParse(process.env);

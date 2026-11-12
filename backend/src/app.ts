@@ -11,6 +11,7 @@ import { HttpError } from "./lib/http.ts";
 import { productsRouter } from "./routes/products.ts";
 import { enquiriesRouter } from "./routes/enquiries.ts";
 import { adminRouter } from "./routes/admin.ts";
+import { labRouter } from "./routes/lab.ts";
 
 export function createApp() {
   const app = express();
@@ -47,6 +48,7 @@ export function createApp() {
   app.use("/api/products", productsRouter);
   app.use("/api", formLimiter, enquiriesRouter);
   app.use("/api/admin", adminRouter);
+  app.use("/api/lab", labRouter);
 
   app.use("/api", (_req, res) => {
     res.status(404).json({ message: "Not found" });

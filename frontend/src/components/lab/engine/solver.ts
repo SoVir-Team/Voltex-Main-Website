@@ -1,6 +1,7 @@
 import { buildNetlist, type Netlist } from "./netlist.ts";
 import { LED_BURN_A, LED_SPECS } from "./parts.ts";
 import type { Board, Part } from "./types.ts";
+import { BOARDS, isMcu, type McuDrives } from "./mcu-boards.ts";
 
 /**
  * Circuit simulation by modified nodal analysis. Every element stamps conductances and current sources into
@@ -23,6 +24,13 @@ export interface SimInputs {
   ambient: number;
   /** Buttons currently held down. */
   pressed: ReadonlySet<string>;
+  /** How each running microcontroller has set its pins. */
+  mcu?: McuDrives;
+  /**
+   * Output bytes of shift registers and I/O expanders driven by a running program, measured at the chip's own
+   * clock edges (too fast for the circuit's time step to see).
+   */
+  latched?: ReadonlyMap<string, number>;
 }
 
 export interface PartState {
@@ -48,7 +56,14 @@ export interface PartState {
   level?: number;
   /** 0..1 rotation of a motor shaft, for drawing. */
   phase?: number;
+  /** What a display driven by a running program shows. */
+  screen?: Screen;
 }
+
+/** Contents of a display, as decoded from the bytes the program sent it. */
+export type Screen =
+  | { kind: "oled"; on: boolean; invert: boolean; w: number; h: number; /** Page-ordered framebuffer, as in SSD1306 GDDRAM. */ fb: Uint8Array }
+  | { kind: "lcd"; on: boolean; /** Character codes, 16 per row. */ rows: number[][]; cursor: { row: number; col: number; show: boolean; blink: boolean } | null; /** Custom characters 0–7, 8 rows of 5 bits each. */ cgram: number[] };
 
 export type SimEvent =
   | { type: "burnt"; partId: string; partType: Part["type"] }
@@ -124,6 +139,10 @@ export function sourceOf(part: Part): Source | null {
     }
     case "usb":
       return { p: "VBUS", n: "GND", rint: 0.05, imax: 2, v: () => 5 };
+    case "uno":
+    case "pico":
+      // Powered from the computer's USB port, which a polyfuse limits to 500 mA.
+      return { p: BOARDS[part.type].usbPin, n: BOARDS[part.type].gnd, rint: 0.1, imax: 0.5, v: () => 5 };
     case "acsource": {
       const a = V ?? 5;
       const f = part.props.freq ?? 50;
@@ -391,6 +410,10 @@ export class Simulator {
       const P = (pin: string) => this.node(part, pin);
       const U = (pin: string) => this.V(v, P(pin));
       const dead = this.burnt.has(part.id);
+      if (isMcu(part.type)) {
+        this.stampMcu(s, part, inputs);
+        continue;
+      }
       const bat = sourceOf(part);
       if (bat) {
         const g = 1 / bat.rint;
@@ -603,7 +626,8 @@ export class Simulator {
           const g = P("GND");
           const vs = U("VCC") - U("GND");
           s.g(P("VCC"), g, 1 / 100000);
-          const [reg, out] = this.mem.get(`S:${part.id}`) ?? [0, 0];
+          const [reg, memOut] = this.mem.get(`S:${part.id}`) ?? [0, 0];
+          const out = inputs.latched?.get(part.id) ?? memOut;
           const oe = U("OE") - U("GND") < vs / 2;
           const drive = (pin: string, bit: number) => {
             const q = P(pin);
@@ -618,7 +642,12 @@ export class Simulator {
         }
         case "pcf8574": {
           s.g(P("VCC"), P("GND"), 1 / 50000);
-          for (let i = 0; i < 8; i++) s.g(P(`P${i}`), P("VCC"), 1 / 40000);
+          // Quasi-bidirectional ports: a 1 is a weak pull-up (about 100 µA), a 0 sinks hard (25 mA at 0.6 V).
+          const bits = inputs.latched?.get(part.id) ?? 0xff;
+          for (let i = 0; i < 8; i++) {
+            if ((bits >> i) & 1) s.g(P(`P${i}`), P("VCC"), 1 / 40000);
+            else s.g(P(`P${i}`), P("GND"), 1 / 25);
+          }
           break;
         }
         case "oled":
@@ -643,6 +672,54 @@ export class Simulator {
       }
     }
     return settled;
+  }
+
+  /**
+   * A microcontroller board: USB feeds the 5 V and 3.3 V rails; each GPIO is an output driver (a voltage behind
+   * the datasheet output resistance), an internal pull-up or pull-down, or a high-impedance input.
+   */
+  private stampMcu(s: Stamper, part: Part, inputs: SimInputs) {
+    const spec = BOARDS[part.type as keyof typeof BOARDS];
+    const P = (pin: string) => this.node(part, pin);
+    const G = P(spec.gnd);
+    for (const r of spec.rails) {
+      const g = 1 / r.rint;
+      s.g(P(r.pin), G, g);
+      s.src(G, P(r.pin), r.v * g);
+    }
+    const drives = inputs.mcu?.get(part.id);
+    if (!drives) return;
+    for (const io of spec.gpio) {
+      const d = drives[io.id];
+      const n = P(io.id);
+      if (!d || d.mode === "in" || n === G) continue;
+      if (d.mode === "out") {
+        const g = 1 / spec.rOut;
+        s.g(n, G, g);
+        s.src(G, n, d.duty * spec.vcc * g);
+      } else {
+        const g = 1 / spec.rPull;
+        s.g(n, G, g);
+        if (d.mode === "pullup") s.src(G, n, spec.vcc * g);
+      }
+    }
+  }
+
+  /** Current flowing out of each GPIO into the circuit, by pin id. */
+  private mcuPinCurrents(part: Part, inputs: SimInputs): Record<string, number> {
+    const spec = BOARDS[part.type as keyof typeof BOARDS];
+    const V = (pin: string) => this.V(this.v, this.node(part, pin));
+    const out: Record<string, number> = {};
+    const drives = inputs.mcu?.get(part.id);
+    for (const io of spec.gpio) {
+      const d = drives?.[io.id];
+      if (!d || d.mode === "in") continue;
+      const vn = V(io.id) - V(spec.gnd);
+      if (d.mode === "out") out[io.id] = (d.duty * spec.vcc - vn) / spec.rOut;
+      else if (d.mode === "pullup") out[io.id] = (spec.vcc - vn) / spec.rPull;
+      else out[io.id] = -vn / spec.rPull;
+    }
+    return out;
   }
 
   /** Coupled-inductor companion conductances for a transformer: 1 H primary, turns ratio n, coupling 0.99. */
@@ -771,6 +848,16 @@ export class Simulator {
       }
       const st = snap.parts[part.id];
       if (!st) continue;
+      if (isMcu(part.type)) {
+        // A pin over its limit is reported (the lab stops the program); the board itself never burns here.
+        if (st.stress > 1) {
+          if (!this.shorted.has(part.id)) {
+            this.shorted.add(part.id);
+            this.events.push({ type: Math.abs(st.current) > 0.5 ? "short" : "overcurrent", partId: part.id, partType: part.type } as SimEvent);
+          }
+        } else this.shorted.delete(part.id);
+        continue;
+      }
       if (sourceOf(part) || part.type === "vcc") {
         if (st.stress > 1) {
           if (!this.shorted.has(part.id)) {
@@ -833,6 +920,20 @@ export class Simulator {
         st.power = Math.abs(I * (V(part, a) - V(part, b)));
       };
       if (!this.powered) {
+        parts[part.id] = st;
+        continue;
+      }
+      if (isMcu(part.type)) {
+        const spec = BOARDS[part.type];
+        const usb = (5 - (V(part, spec.usbPin) - V(part, spec.gnd))) / 0.1;
+        const pins = this.mcuPinCurrents(part, inputs);
+        const worst = Math.max(0, ...Object.values(pins).map(Math.abs));
+        st.current = usb;
+        st.pinCurrents = pins;
+        st.power = usb * 5;
+        st.on = true;
+        st.stress = Math.max(Math.abs(usb) / 0.5, worst / spec.iMax);
+        st.glow = inputs.mcu?.get(part.id)?.[spec.led]?.duty ?? 0;
         parts[part.id] = st;
         continue;
       }
@@ -1143,7 +1244,8 @@ export class Simulator {
         }
         case "hc595": {
           const vs = V(part, "VCC") - V(part, "GND");
-          const [, out] = this.mem.get(`S:${part.id}`) ?? [0, 0];
+          const [, memOut] = this.mem.get(`S:${part.id}`) ?? [0, 0];
+          const out = inputs.latched?.get(part.id) ?? memOut;
           st.segs = Array.from({ length: 8 }, (_, i) => (out >> i) & 1);
           st.on = vs > 2;
           let iq = vs / 100000;

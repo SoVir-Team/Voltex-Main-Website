@@ -1,6 +1,7 @@
 import type { PartDef, PinDef } from "./parts.ts";
 import type { PartType } from "./types.ts";
 import { choice, formatValue, num, volts } from "./units.ts";
+import { PICO, UNO } from "./mcu-boards.ts";
 
 /**
  * The parts added for the full student list. Pins sit on schematic spacing; each `body` box covers the symbol so
@@ -463,6 +464,30 @@ const DEFS: Partial<Record<PartType, Extra>> = {
     learn: "A screw terminal clamps bare wires, handy for power leads, motors and anything you connect and disconnect often.",
     spec: () => "2-pin · 5 mm",
     label: () => "2-pin",
+  },
+  uno: {
+    name: "Arduino Uno",
+    prefix: "U",
+    category: "Active",
+    pins: UNO.pins,
+    body: { x: -6.2, y: -1.4, w: 26.6, h: 21.8 },
+    defaults: {},
+    tied: UNO.tied,
+    learn: "An Arduino Uno runs the program you write on its ATmega328P chip. Its pins switch between 0 V and 5 V, read buttons, measure voltages from 0 to 5 V and talk to other chips. Each pin can safely give about 20 mA (40 mA is the absolute limit).",
+    spec: () => "ATmega328P · 16 MHz · 5 V I/O",
+    label: () => "Arduino Uno",
+  },
+  pico: {
+    name: "Raspberry Pi Pico",
+    prefix: "U",
+    category: "Active",
+    pins: PICO.pins,
+    body: { x: -0.65, y: -1.6, w: 8.3, h: 21.4 },
+    defaults: {},
+    tied: PICO.tied,
+    learn: "A Raspberry Pi Pico runs your Arduino C++ or MicroPython program on its RP2040 chip. Its pins work at 3.3 V: never connect 5 V to a GPIO. At the default setting each pin gives about 4 mA, 12 mA at most.",
+    spec: () => "RP2040 · 125 MHz · 3.3 V I/O",
+    label: () => "Raspberry Pi Pico",
   },
 };
 

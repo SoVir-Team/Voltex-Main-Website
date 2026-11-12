@@ -1,4 +1,4 @@
-import { pinPositions } from "./parts.ts";
+import { PART_DEFS, pinPositions } from "./parts.ts";
 import type { Board, Layer, PinRef, Pt } from "./types.ts";
 import { MM } from "./types.ts";
 
@@ -125,6 +125,15 @@ export function buildNetlist(board: Board): Netlist {
     if (first === undefined) labels.set(key, i);
     else uf.union(i, first);
   });
+  // Pins joined on the part itself (a board's GND pins) are one node too.
+  const padAt = new Map<string, number>();
+  copper.forEach((c, i) => c.kind === "pad" && padAt.set(c.pin, i));
+  for (const part of board.parts) {
+    for (const group of PART_DEFS[part.type].tied ?? []) {
+      const idx = group.map((pin) => padAt.get(`${part.id}.${pin}`)).filter((i): i is number => i !== undefined);
+      for (const i of idx.slice(1)) uf.union(i, idx[0]);
+    }
+  }
   const groups = new Map<number, Copper[]>();
   copper.forEach((c, i) => {
     const root = uf.find(i);

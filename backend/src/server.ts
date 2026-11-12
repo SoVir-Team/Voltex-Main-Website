@@ -2,6 +2,7 @@ import { config } from "./config.ts";
 import { createApp } from "./app.ts";
 import { prisma } from "./db.ts";
 import { autoSeed } from "./services/catalogue.ts";
+import { warmUp } from "./services/compiler.ts";
 
 const app = createApp();
 
@@ -12,6 +13,9 @@ if (config.AUTO_SEED !== "false") {
 const server = app.listen(config.PORT, () => {
   console.log(`VOLTEX API listening on http://localhost:${config.PORT}`);
 });
+
+// Student Lab compiler: build the board cores while nothing is waiting on them.
+void warmUp().then(() => config.ARDUINO_CLI && console.log("Student Lab compiler ready"));
 
 const shutdown = (signal: string) => {
   console.log(`${signal} received, shutting down`);

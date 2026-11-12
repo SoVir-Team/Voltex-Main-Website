@@ -15,11 +15,12 @@ const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../"),
   poweredByHeader: false,
-  // Tailwind CSS v4 runs as a Turbopack loader.
+  // Tailwind CSS v4 runs as a Turbopack loader, on the one stylesheet that uses it: matching every *.css would
+  // turn the ESP32 Labs' CSS Modules into plain global CSS.
   turbopack: {
     root: path.join(__dirname, "../"),
     rules: {
-      "*.css": { loaders: ["@tailwindcss/turbopack"], as: "*.css" },
+      "globals.css": { loaders: ["@tailwindcss/turbopack"], as: "*.css" },
     },
   },
   images: {

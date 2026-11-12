@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { LED_SPECS, PART_DEFS, formatValue } from "../engine/parts.ts";
 import type { PartState } from "../engine/solver.ts";
 import type { Part, PartType } from "../engine/types.ts";
+import { LcdChars, McuBoardArt, OledPixels } from "./BoardArt.tsx";
 
 /**
  * Schematic symbols for the design view. Each symbol is drawn in grid units between the part's pins, inside the
@@ -488,8 +489,9 @@ export function PartSymbol({ part, st, ink }: { part: Part; st?: PartState; ink:
         <g>
           <rect x={-0.6} y={-4.4} width={4.2} height={3.8} rx={0.2} fill="#16161a" stroke={line} strokeWidth={W} />
           <rect x={-0.3} y={-4.1} width={3.6} height={2.3} fill={on ? "#071728" : "#050507"} />
-          {on && T(1.5, -3.35, "VOLTEX", 0.5, { fill: "#7fd7ff", weight: 800 })}
-          {on && <path d="M0 -2.6 H3 M0 -2.2 H2" stroke="#7fd7ff" strokeWidth={0.08} />}
+          {on && st?.screen?.kind === "oled" && <OledPixels screen={st.screen} x={-0.3} y={-4.1} w={3.6} h={2.3} color="#7fd7ff" />}
+          {on && !st?.screen && T(1.5, -3.35, "VOLTEX", 0.5, { fill: "#7fd7ff", weight: 800 })}
+          {on && !st?.screen && <path d="M0 -2.6 H3 M0 -2.2 H2" stroke="#7fd7ff" strokeWidth={0.08} />}
           {def.pins.map((pin) => (
             <g key={pin.id}>
               <path d={`M${pin.x} 0 V-0.6`} {...S} />
@@ -507,8 +509,9 @@ export function PartSymbol({ part, st, ink }: { part: Part; st?: PartState; ink:
         <g>
           <rect x={-0.6} y={-5} width={16.2} height={4.4} rx={0.2} fill="#1f6f3f" stroke={line} strokeWidth={W} />
           <rect x={0.4} y={-4.6} width={14.2} height={2.7} fill={lit > 0.05 ? "#b5e05a" : "#6f8f3e"} />
-          {on && T(7.5, -3.95, "HELLO, VOLTEX!", 0.7, { mono: true, fill: "#1d2b12" })}
-          {on && T(7.5, -2.75, "16x2 LCD READY", 0.7, { mono: true, fill: "#1d2b12" })}
+          {on && st?.screen?.kind === "lcd" && <LcdChars screen={st.screen} x={0.5} y={-4.55} w={14} h={2.6} ink="#1d2b12" rot={rot} />}
+          {on && !st?.screen && T(7.5, -3.95, "HELLO, VOLTEX!", 0.7, { mono: true, fill: "#1d2b12" })}
+          {on && !st?.screen && T(7.5, -2.75, "16x2 LCD READY", 0.7, { mono: true, fill: "#1d2b12" })}
           {def.pins.map((pin) => (
             <g key={pin.id}>
               <path d={`M${pin.x} 0 V-0.6`} {...S} />
@@ -569,6 +572,10 @@ export function PartSymbol({ part, st, ink }: { part: Part; st?: PartState; ink:
           {minus(2.75, 0.45)}
         </g>
       );
+      break;
+    case "uno":
+    case "pico":
+      body = <McuBoardArt type={part.type} st={st} />;
       break;
     case "timer555": {
       const bottom = ["GND", "TRIG", "OUT", "RST"];

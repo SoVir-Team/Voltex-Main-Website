@@ -53,7 +53,9 @@ export type PartType =
   | "lcd1602"
   | "header"
   | "usb"
-  | "screwterm";
+  | "screwterm"
+  | "uno"
+  | "pico";
 
 export type LedColor = "red" | "green" | "blue" | "white" | "yellow" | "orange" | "amber" | "pink" | "purple" | "uv" | "ir";
 

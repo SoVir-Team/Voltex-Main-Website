@@ -8,28 +8,46 @@
     "start": "node --env-file-if-exists=.env.local .next/standalone/frontend/server.js",
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\""
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/components/{lab,mcu}/**/*.test.ts\" && vitest run"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-cpp": "^6.0.3",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/lint": "^6.9.7",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
     "@gsap/react": "^2.1.2",
+    "@tanstack/react-query": "5.104.3",
     "@voltex/shared": "*",
+    "avr8js": "^0.21.1",
     "clsx": "^2.1.1",
+    "codemirror": "^6.0.2",
     "gsap": "^3.15.1",
+    "i18next": "26.4.2",
     "lucide-react": "^1.68.0",
     "motion": "^14.9.1",
     "next": "16.4.5",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "server-only": "^0.0.1"
+    "react-i18next": "17.0.15",
+    "react-router": "8.4.0",
+    "rp2040js": "^1.4.1",
+    "server-only": "^0.0.1",
+    "three": "0.186.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "0.186.0",
     "eslint": "^10.14.0",
     "eslint-config-next": "16.4.5",
     "tailwindcss": "^4",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.0"
   }
 }

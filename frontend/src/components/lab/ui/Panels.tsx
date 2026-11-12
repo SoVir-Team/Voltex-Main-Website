@@ -31,7 +31,9 @@ export function Section({ title, children, aside }: { title: string; children: R
 
 export function Palette({ state, dispatch, allowed }: { state: LabState; dispatch: Dispatch<Action>; allowed: PartType[] }) {
   const [q, setQ] = useState("");
-  const list = PALETTE.filter((t) => allowed.includes(t) && PART_DEFS[t].name.toLowerCase().includes(q.toLowerCase()));
+  // Parts outside the PCB palette (the microcontroller boards) come after it, in the order given.
+  const order = [...PALETTE, ...allowed.filter((t) => !PALETTE.includes(t))];
+  const list = order.filter((t) => allowed.includes(t) && PART_DEFS[t].name.toLowerCase().includes(q.toLowerCase()));
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="px-4 pt-4">
@@ -291,7 +293,8 @@ export function Inspector({ part, st, burnt, voltage, dispatch, onRepair }: { pa
   );
 }
 
-export function DrcPanel({ issues, status, onFocus, onFab, canFab }: { issues: DrcIssue[]; status: "unchecked" | "stale" | "fresh"; onFocus: (i: DrcIssue) => void; onFab: () => void; canFab: boolean }) {
+export function DrcPanel({ issues, status, onFocus, onFab, canFab, gate = "power" }: { issues: DrcIssue[]; status: "unchecked" | "stale" | "fresh"; onFocus: (i: DrcIssue) => void; onFab?: () => void; canFab: boolean; gate?: "power" | "run" }) {
+  const unlock = gate === "run" ? "Run stays locked" : "Power stays off";
   const errors = issues.filter((i) => i.severity === "error").length;
   const fresh = status === "fresh";
   return (
@@ -304,14 +307,14 @@ export function DrcPanel({ issues, status, onFocus, onFab, canFab }: { issues: D
       }
     >
       {status === "unchecked" ? (
-        <p className="text-[0.875rem] text-muted">Press Check to test your circuit. Power stays off until the check finds no errors.</p>
+        <p className="text-[0.875rem] text-muted">Press Check to test your circuit. {unlock} until the check finds no errors.</p>
       ) : status === "stale" ? (
-        <p className="text-[0.875rem] text-muted">You changed the circuit since the last check. Press Check again before you power it on.</p>
+        <p className="text-[0.875rem] text-muted">You changed the circuit since the last check. Press Check again before you {gate === "run" ? "run it" : "power it on"}.</p>
       ) : issues.length === 0 ? (
-        <p className="text-[0.875rem] text-muted">No problems found. You can power it on, and this board could go to the factory.</p>
+        <p className="text-[0.875rem] text-muted">{gate === "run" ? "No problems found. You can run your program on it." : "No problems found. You can power it on, and this board could go to the factory."}</p>
       ) : (
         <>
-          {errors > 0 && <p className="mb-2 text-[0.85rem] font-semibold text-danger">Fix the errors to unlock the power button.</p>}
+          {errors > 0 && <p className="mb-2 text-[0.85rem] font-semibold text-danger">Fix the errors to unlock the {gate === "run" ? "Run" : "power"} button.</p>}
           <ul className="max-h-56 space-y-1 overflow-y-auto" aria-live="polite">
             {issues.map((d, k) => (
               <li key={`${d.code}-${k}`}>
@@ -327,10 +330,10 @@ export function DrcPanel({ issues, status, onFocus, onFab, canFab }: { issues: D
           </ul>
         </>
       )}
-      <button type="button" disabled={!canFab} onClick={onFab} className={clsx(panelBtn, "mt-4 w-full", !fresh || errors ? "bg-surface text-ink hover:bg-surface-2" : "bg-bolt text-ink-deep hover:bg-[#46b7e2]")}>
+      {onFab && <button type="button" disabled={!canFab} onClick={onFab} className={clsx(panelBtn, "mt-4 w-full", !fresh || errors ? "bg-surface text-ink hover:bg-surface-2" : "bg-bolt text-ink-deep hover:bg-[#46b7e2]")}>
         <Factory aria-hidden className="h-4 w-4" />
         Send to fab
-      </button>
+      </button>}
     </Section>
   );
 }

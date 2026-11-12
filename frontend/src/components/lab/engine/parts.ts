@@ -34,6 +34,8 @@ export interface PartDef {
   fields?: FieldDef[];
   /** Value text drawn next to the schematic symbol, e.g. "16 V" or "4.7 kΩ". */
   label?: (p: PartProps) => string;
+  /** Groups of pins joined on the part itself, such as a board's several GND pins. */
+  tied?: string[][];
 }
 
 export const LED_SPECS: Record<LedColor, { vf: number; hex: string; label: string }> = {
