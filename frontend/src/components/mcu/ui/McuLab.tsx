@@ -26,7 +26,8 @@ const TOOLS: { tool: Tool; label: string; key: string; icon: typeof Spline }[] =
   { tool: "delete", label: "Delete", key: "X", icon: Trash2 },
 ];
 
-const ALLOWED: PartType[] = ["uno", "pico", ...PALETTE];
+// The boards the lab can emulate, then every other part (the PCB Lab's other boards cannot run a program here).
+const ALLOWED: PartType[] = ["uno", "pico", ...PALETTE.filter((t) => !isMcu(t))];
 const STORAGE = "voltex-mcu-v1";
 
 interface Project {

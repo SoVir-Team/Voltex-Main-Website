@@ -2,12 +2,12 @@
 
 import { clsx } from "clsx";
 import { Check, ChevronLeft, ChevronRight, Factory, Lightbulb, RefreshCw, RotateCw, Trash2, Wrench } from "lucide-react";
-import { useId, useState, type Dispatch, type ReactNode } from "react";
+import { Fragment, useId, useState, type Dispatch, type ReactNode } from "react";
 import type { DrcIssue } from "../engine/drc.ts";
 import type { CheckItem } from "../engine/missions.ts";
 import { MISSIONS } from "../engine/missions.ts";
 import { PROJECTS } from "../engine/projects.ts";
-import { PALETTE, PART_DEFS, formatValue, parseSI, type FieldDef } from "../engine/parts.ts";
+import { PALETTE, PALETTE_GROUPS, PART_DEFS, formatValue, parseSI, type FieldDef } from "../engine/parts.ts";
 import type { PartState } from "../engine/solver.ts";
 import type { Part, PartProps, PartType } from "../engine/types.ts";
 import { activeMission, trackOf, type Action, type LabState, type Mode } from "../state/store.ts";
@@ -31,9 +31,11 @@ export function Section({ title, children, aside }: { title: string; children: R
 
 export function Palette({ state, dispatch, allowed }: { state: LabState; dispatch: Dispatch<Action>; allowed: PartType[] }) {
   const [q, setQ] = useState("");
-  // Parts outside the PCB palette (the microcontroller boards) come after it, in the order given.
-  const order = [...PALETTE, ...allowed.filter((t) => !PALETTE.includes(t))];
-  const list = order.filter((t) => allowed.includes(t) && PART_DEFS[t].name.toLowerCase().includes(q.toLowerCase()));
+  const match = (t: PartType) => allowed.includes(t) && PART_DEFS[t].name.toLowerCase().includes(q.toLowerCase());
+  // Parts outside the PCB palette (the emulated Pico in the Microcontroller Lab) join the last group, Boards.
+  const extra = allowed.filter((t) => !PALETTE.includes(t));
+  const last = PALETTE_GROUPS.length - 1;
+  const groups = PALETTE_GROUPS.map((g, i) => ({ title: g.title, parts: [...g.parts, ...(i === last ? extra : [])].filter(match) })).filter((g) => g.parts.length > 0);
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="px-4 pt-4">
@@ -49,27 +51,32 @@ export function Palette({ state, dispatch, allowed }: { state: LabState; dispatc
         <p className="px-4 pt-3 text-[0.875rem] leading-snug text-muted">This mission gives you every part you need. Route them together.</p>
       ) : (
         <ul className="mt-3 flex gap-1 overflow-x-auto px-2 pb-3 lg:flex-col lg:overflow-y-auto">
-          {list.map((t) => (
-            <li key={t} className="shrink-0">
-              <button
-                type="button"
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData("application/x-voltex-part", t);
-                  e.dataTransfer.effectAllowed = "copy";
-                }}
-                onClick={() => dispatch({ type: "placing", part: state.placing === t ? null : t })}
-                aria-pressed={state.placing === t}
-                className={clsx(
-                  "flex w-full items-center gap-3 px-2 py-1.5 text-left transition-colors duration-150",
-                  state.placing === t ? "bg-bolt/20 text-ink" : "text-muted hover:bg-surface hover:text-ink",
-                )}
-              >
-                <PartImage type={t} />
-                <span className="hidden text-[0.875rem] font-semibold leading-tight lg:block">{PART_DEFS[t].name}</span>
-                <span className="sr-only lg:hidden">{PART_DEFS[t].name}</span>
-              </button>
-            </li>
+          {groups.map((g) => (
+            <Fragment key={g.title}>
+              <li className="hidden px-2 pb-1 pt-3 text-[0.75rem] font-bold uppercase tracking-wide text-muted first:pt-0 lg:block">{g.title}</li>
+              {g.parts.map((t) => (
+                <li key={t} className="shrink-0">
+                  <button
+                    type="button"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("application/x-voltex-part", t);
+                      e.dataTransfer.effectAllowed = "copy";
+                    }}
+                    onClick={() => dispatch({ type: "placing", part: state.placing === t ? null : t })}
+                    aria-pressed={state.placing === t}
+                    className={clsx(
+                      "flex w-full items-center gap-3 px-2 py-1.5 text-left transition-colors duration-150",
+                      state.placing === t ? "bg-bolt/20 text-ink" : "text-muted hover:bg-surface hover:text-ink",
+                    )}
+                  >
+                    <PartImage type={t} />
+                    <span className="hidden text-[0.875rem] font-semibold leading-tight lg:block">{PART_DEFS[t].name}</span>
+                    <span className="sr-only lg:hidden">{PART_DEFS[t].name}</span>
+                  </button>
+                </li>
+              ))}
+            </Fragment>
           ))}
         </ul>
       )}

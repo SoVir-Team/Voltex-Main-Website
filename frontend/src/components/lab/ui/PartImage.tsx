@@ -460,6 +460,14 @@ function NewImage({ type }: { type: PartType }): ReactNode {
       );
     case "uno":
     case "pico":
+    case "nano":
+    case "mega":
+    case "esp32dev30":
+    case "esp32dev38":
+    case "nodemcu":
+    case "esp32cam":
+    case "esp32s3":
+    case "esp32c3":
       return <McuBoardIcon type={type} />;
     case "screwterm":
       return (

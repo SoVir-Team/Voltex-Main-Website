@@ -69,7 +69,8 @@ export const trackOf = (m: Mode) => (m.kind === "project" ? PROJECTS : MISSIONS)
 
 export const modeKey = (m: Mode) => activeMission(m)?.id ?? "sandbox";
 
-export const SANDBOX_BOARD: Board = { w: 40, h: 26, parts: [], traces: [], vias: [] };
+// 127 × 76 mm: room for the largest board in the Parts list, the Arduino Mega 2560 (101.6 × 53.3 mm).
+export const SANDBOX_BOARD: Board = { w: 50, h: 30, parts: [], traces: [], vias: [] };
 
 export function starterBoard(mode: Mode): Board {
   return structuredClone(activeMission(mode)?.board ?? SANDBOX_BOARD);

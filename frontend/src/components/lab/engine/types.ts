@@ -55,7 +55,15 @@ export type PartType =
   | "usb"
   | "screwterm"
   | "uno"
-  | "pico";
+  | "pico"
+  | "nano"
+  | "mega"
+  | "esp32dev30"
+  | "esp32dev38"
+  | "nodemcu"
+  | "esp32cam"
+  | "esp32s3"
+  | "esp32c3";
 
 export type LedColor = "red" | "green" | "blue" | "white" | "yellow" | "orange" | "amber" | "pink" | "purple" | "uv" | "ir";
 

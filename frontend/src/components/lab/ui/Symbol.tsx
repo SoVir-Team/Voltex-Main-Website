@@ -575,6 +575,14 @@ export function PartSymbol({ part, st, ink }: { part: Part; st?: PartState; ink:
       break;
     case "uno":
     case "pico":
+    case "nano":
+    case "mega":
+    case "esp32dev30":
+    case "esp32dev38":
+    case "nodemcu":
+    case "esp32cam":
+    case "esp32s3":
+    case "esp32c3":
       body = <McuBoardArt type={part.type} st={st} />;
       break;
     case "timer555": {

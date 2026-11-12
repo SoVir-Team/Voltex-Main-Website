@@ -1,7 +1,7 @@
 import { buildNetlist, type Netlist } from "./netlist.ts";
 import { LED_BURN_A, LED_SPECS } from "./parts.ts";
 import type { Board, Part } from "./types.ts";
-import { BOARDS, isMcu, type McuDrives } from "./mcu-boards.ts";
+import { BOARDS, isMcu, usbRail, type McuDrives } from "./mcu-boards.ts";
 
 /**
  * Circuit simulation by modified nodal analysis. Every element stamps conductances and current sources into
@@ -124,6 +124,12 @@ export interface Source {
 
 export function sourceOf(part: Part): Source | null {
   const V = part.props.value;
+  if (isMcu(part.type)) {
+    // A board is powered from the computer's USB port, which a polyfuse limits to 500 mA.
+    const spec = BOARDS[part.type];
+    const usb = usbRail(spec);
+    return { p: spec.usbPin, n: spec.gnd, rint: usb.rint, imax: 0.5, v: () => usb.v };
+  }
   switch (part.type) {
     case "battery9v": {
       const v = V ?? 9;
@@ -139,10 +145,6 @@ export function sourceOf(part: Part): Source | null {
     }
     case "usb":
       return { p: "VBUS", n: "GND", rint: 0.05, imax: 2, v: () => 5 };
-    case "uno":
-    case "pico":
-      // Powered from the computer's USB port, which a polyfuse limits to 500 mA.
-      return { p: BOARDS[part.type].usbPin, n: BOARDS[part.type].gnd, rint: 0.1, imax: 0.5, v: () => 5 };
     case "acsource": {
       const a = V ?? 5;
       const f = part.props.freq ?? 50;
@@ -925,12 +927,13 @@ export class Simulator {
       }
       if (isMcu(part.type)) {
         const spec = BOARDS[part.type];
-        const usb = (5 - (V(part, spec.usbPin) - V(part, spec.gnd))) / 0.1;
+        const rail = usbRail(spec);
+        const usb = (rail.v - (V(part, spec.usbPin) - V(part, spec.gnd))) / rail.rint;
         const pins = this.mcuPinCurrents(part, inputs);
         const worst = Math.max(0, ...Object.values(pins).map(Math.abs));
         st.current = usb;
         st.pinCurrents = pins;
-        st.power = usb * 5;
+        st.power = usb * rail.v;
         st.on = true;
         st.stress = Math.max(Math.abs(usb) / 0.5, worst / spec.iMax);
         st.glow = inputs.mcu?.get(part.id)?.[spec.led]?.duty ?? 0;
