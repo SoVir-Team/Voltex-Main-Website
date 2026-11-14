@@ -202,6 +202,14 @@ export function Catalogue({ initial, division }: { initial: Product[] | null; di
               Try again
             </Button>
           </div>
+        ) : visible.length === 0 && shown.length === 0 && division ? (
+          <div className="mt-10 bg-surface p-10">
+            <h3 className="text-heading font-bold">Products coming soon</h3>
+            <p className="mt-3 max-w-[36rem] text-muted">We are preparing this range. Tell us what you need and an engineer will get back to you.</p>
+            <Link href="/contact?subject=Home%20automation%20enquiry" className={buttonClass("primary", "mt-6")}>
+              Make an enquiry
+            </Link>
+          </div>
         ) : visible.length === 0 ? (
           <div className="mt-10 bg-surface p-10">
             <h3 className="text-heading font-bold">No products match</h3>

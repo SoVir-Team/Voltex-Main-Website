@@ -15,6 +15,7 @@ enum Division {
   electronics
   electrical
   industrial
+  home_automation
 }
 
 enum DiscountType {

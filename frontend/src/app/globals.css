@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* Native option popups must use explicit colors on the dark lab surface. */
+[data-ui] select {
+  color-scheme: dark;
+  color: #ffffff;
+  background-color: #292947;
+}
+[data-ui] select option {
+  color: #ffffff;
+  background-color: #292947;
+}
+
 /*
   VOLTEX design tokens.
   Colours come from the logo: bolt blue #2BA9DA (facet #299ED0) and wordmark navy #292957, on a white ground.

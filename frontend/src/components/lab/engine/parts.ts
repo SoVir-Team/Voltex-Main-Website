@@ -1,6 +1,6 @@
 import type { LedColor, Part, PartProps, PartType, Pt, Rot } from "./types.ts";
 import { NEW_PARTS } from "./parts-extra.ts";
-import { choice, num, volts } from "./units.ts";
+import { choice, formatValue, num, volts } from "./units.ts";
 
 export { choice, formatValue, num, parseSI, volts } from "./units.ts";
 
@@ -155,10 +155,10 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     body: { x: -0.5, y: -1, w: 2, h: 2, round: true },
     defaults: { color: "red" },
     polarised: true,
-    learn: "An LED only conducts from anode (long leg, A) to cathode (flat side, K). It needs a series resistor: R = (supply − LED voltage) ÷ 20 mA.",
-    spec: (p) => `${LED_SPECS[p.color ?? "red"].label} · Vf ${LED_SPECS[p.color ?? "red"].vf} V · 20 mA`,
+    learn: "An LED only conducts from anode (long leg, A) to cathode (flat side, K). It needs a series resistor: R = (supply voltage minus forward voltage) divided by rated current.",
+    spec: (p) => `${LED_SPECS[p.color ?? "red"].label} · Vf ${formatValue(p.forwardVoltage ?? LED_SPECS[p.color ?? "red"].vf, "V")} · ${formatValue(p.ratedCurrent ?? 0.02, "A")}`,
     fields: [{ kind: "choice", key: "color", label: "Colour", fallback: "red", options: (Object.keys(LED_SPECS) as LedColor[]).map((c) => ({ value: c, label: `${LED_SPECS[c].label} · ${LED_SPECS[c].vf} V` })) }],
-    label: (p) => LED_SPECS[p.color ?? "red"].label,
+    label: (p) => `${LED_SPECS[p.color ?? "red"].label} ${formatValue(p.forwardVoltage ?? LED_SPECS[p.color ?? "red"].vf, "V")}`,
   },
   diode: {
     type: "diode",
@@ -172,8 +172,8 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     body: { x: 1, y: -0.45, w: 2, h: 0.9 },
     defaults: {},
     polarised: true,
-    learn: "A diode is a one-way valve for current. The band marks the cathode. It drops about 0.7 V when conducting.",
-    spec: () => "1 A · 0.7 V drop",
+    learn: "A diode is a one-way valve for current. The band marks the cathode. Its forward voltage is specified at the configured rated current.",
+    spec: (p) => `${formatValue(p.ratedCurrent ?? 1, "A")} · ${formatValue(p.forwardVoltage ?? 0.7, "V")} drop`,
     label: () => "1N4007",
   },
   ceramic: {
@@ -220,7 +220,7 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     ],
     body: { x: 0, y: -1.5, w: 3, h: 3 },
     defaults: { closed: false },
-    learn: "A tactile push button connects its pins only while pressed. During simulation, press and hold it on the board.",
+    learn: "A tactile push button changes its contact state while pressed. Normally closed reverses this behaviour. During simulation, press and hold it on the board.",
     spec: () => "Momentary · 50 mA",
   },
   switch: {
@@ -282,8 +282,8 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     ],
     body: { x: -0.2, y: -1.1, w: 2.4, h: 2.2, round: true },
     defaults: {},
-    learn: "A light-dependent resistor drops from about 1 MΩ in the dark to about 1 kΩ in bright light. Use the light slider to test it.",
-    spec: () => "1 kΩ bright · 1 MΩ dark",
+    learn: "A light-dependent resistor changes between its configured dark and bright resistances. Use the light slider to test it.",
+    spec: (p) => `${formatOhms(p.brightResistance ?? 1000)} bright · ${formatOhms(p.darkResistance ?? 1e6)} dark`,
     label: () => "LDR",
   },
   buzzer: {
@@ -298,8 +298,8 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     body: { x: -0.9, y: -2.4, w: 4.8, h: 4.8, round: true },
     defaults: {},
     polarised: true,
-    learn: "An active buzzer has its own oscillator inside: give it 3 to 12 V the right way round and it beeps.",
-    spec: () => "3–12 V · 25 mA",
+    learn: "An active buzzer has its own oscillator inside: power it within its configured operating range, the right way round, and it sounds at the configured frequency.",
+    spec: (p) => `${formatValue(p.minVoltage ?? 3, "V")}–${formatValue(p.maxVoltage ?? 12, "V")} · ${formatValue(p.frequency ?? 2400, "Hz")} · ${formatOhms(p.loadResistance ?? 360)} load`,
     label: () => "Buzzer",
   },
   timer555: {
@@ -319,8 +319,8 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     ],
     body: { x: -0.5, y: -2.5, w: 4, h: 2 },
     defaults: {},
-    learn: "The 555 timer flips its output when a capacitor charges past ⅔ of the supply and back when it falls below ⅓. Two resistors and a capacitor set the blink rate.",
-    spec: () => "4.5–15 V · 200 mA out",
+    learn: "The 555 timer changes its output when a capacitor crosses its configured trigger and threshold ratios of the supply. Two resistors and a capacitor set the blink rate.",
+    spec: (p) => `4.5–15 V · trigger ${Math.round((p.triggerRatio ?? 1 / 3) * 100)} % · threshold ${Math.round((p.thresholdRatio ?? 2 / 3) * 100)} % · ${formatOhms(p.outputResistance ?? 15)} out · ${formatValue(p.outputDrop ?? 1.7, "V")} drop`,
     label: () => "NE555",
   },
   ...NEW_PARTS,

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { ORDER_STATUSES, discountError, isDivision, type DiscountType } from "@voltex/shared";
+import { ORDER_STATUSES, discountError, isDivision, divisionToDb, type DiscountType } from "@voltex/shared";
 import { prisma, Prisma } from "../db.ts";
 import { HttpError, badRequest, handler, isUuid, notFound } from "../lib/http.ts";
 import { presentOrder, presentProduct } from "../lib/present.ts";
@@ -82,7 +82,7 @@ productsRouter.post(
       throw badRequest(errors.length ? errors : [invalid]);
     }
     try {
-      const product = await prisma.product.create({ data: { ...(out as Required<typeof out>), imageUrl } });
+      const product = await prisma.product.create({ data: { ...(out as Required<typeof out>), division: out.division as never, imageUrl } });
       res.status(201).json(presentProduct(product));
     } catch (e) {
       removeUploadedImage(imageUrl);
@@ -114,7 +114,7 @@ productsRouter.put(
       if (invalid) throw badRequest([invalid]);
       const removeImage = req.body?.removeImage === "true" || req.body?.removeImage === true;
       const imageUrl = newImage ?? (removeImage ? "" : undefined);
-      const updated = await prisma.product.update({ where: { id }, data: { ...out, ...(imageUrl !== undefined && { imageUrl }) } });
+      const updated = await prisma.product.update({ where: { id }, data: { ...out, division: out.division as never, ...(imageUrl !== undefined && { imageUrl }) } });
       if (imageUrl !== undefined && product.imageUrl !== imageUrl) removeUploadedImage(product.imageUrl);
       res.json(presentProduct(updated));
     } catch (e) {
@@ -164,10 +164,10 @@ productsRouter.delete(
 productsRouter.get(
   "/",
   handler(async (req, res) => {
-    // Optional ?division=electronics|electrical|industrial for the section pages.
+    // Optional ?division=electronics|electrical|industrial|home-automation for the section pages.
     const division = isDivision(req.query.division) ? req.query.division : undefined;
     const products = await prisma.product.findMany({
-      where: { isActive: true, ...(division && { division }) },
+      where: { isActive: true, ...(division && { division: divisionToDb(division) as never }) },
       orderBy: [{ category: "asc" }, { name: "asc" }],
     });
     res.json({ data: products.map(presentProduct) });

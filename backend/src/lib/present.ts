@@ -1,4 +1,4 @@
-import { pricing, stockStatus, type Product, type ProductOrder, type DiscountType, type Division } from "@voltex/shared";
+import { pricing, stockStatus, type Product, type ProductOrder, type DiscountType, type Division, divisionFromDb } from "@voltex/shared";
 import type { Product as DbProduct, ProductOrder as DbOrder, OrderItem as DbItem } from "../generated/prisma/client.ts";
 
 const n = (d: unknown): number => Number(d ?? 0);
@@ -16,7 +16,7 @@ export function presentProduct(p: DbProduct): Product {
     name: p.name,
     sku: p.sku,
     brand: p.brand,
-    division: p.division as Division,
+    division: divisionFromDb(p.division),
     category: p.category,
     description: p.description,
     hsnCode: p.hsnCode,

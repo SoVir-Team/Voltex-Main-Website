@@ -7,9 +7,10 @@ import type { DrcIssue } from "../engine/drc.ts";
 import type { CheckItem } from "../engine/missions.ts";
 import { MISSIONS } from "../engine/missions.ts";
 import { PROJECTS } from "../engine/projects.ts";
-import { PALETTE, PALETTE_GROUPS, PART_DEFS, formatValue, parseSI, type FieldDef } from "../engine/parts.ts";
+import { LED_SPECS, PALETTE, PALETTE_GROUPS, PART_DEFS, formatValue, parseSI, type FieldDef } from "../engine/parts.ts";
+import { PROPERTY_DEFS, propertySpec, propertyValue, validateProperties, type PropertyDef } from "../engine/properties.ts";
 import type { PartState } from "../engine/solver.ts";
-import type { Part, PartProps, PartType } from "../engine/types.ts";
+import type { LedColor, Part, PartProps, PartType } from "../engine/types.ts";
 import { activeMission, trackOf, type Action, type LabState, type Mode } from "../state/store.ts";
 import { PartImage } from "./PartImage.tsx";
 import { fmtA, fmtV } from "./BoardCanvas.tsx";
@@ -228,6 +229,92 @@ function NumberField({ f, value, onSet, field }: { f: Extract<FieldDef, { kind: 
   );
 }
 
+/**
+ * A custom value for one property. Type any number in the unit shown (400, 4.7), or with an SI prefix
+ * (4.7k, 100n). Pressing Enter or leaving the field applies it to the circuit; the board label updates at once.
+ */
+function NumericProperty({ part, def, dispatch }: { part: Part; def: PropertyDef; dispatch: Dispatch<Action> }) {
+  const scale = def.scale ?? 1;
+  const current = propertyValue(part, def.key);
+  const shown = String(Number((current * scale).toPrecision(8)));
+  const [draft, setDraft] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const toBase = (text: string): number => {
+    const t = text.trim();
+    if (t === "") return NaN;
+    // A prefix (k, M, m, u, n, p, G) means the number is already in base units (4.7k Ω, 100n F).
+    if (/^[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?\s*[pnuµμmkKMG]/.test(t)) return parseSI(t);
+    const digits = t.replace(/\s*[a-zA-ZΩµ%]+$/, "");
+    const n = digits === "" ? NaN : Number(digits);
+    return Number.isFinite(n) ? n / scale : NaN;
+  };
+  const commit = (text: string) => {
+    const value = toBase(text);
+    const patch = { [def.key]: value };
+    const problem = Number.isFinite(value)
+      ? validateProperties(part, patch)
+      : `Enter a number for ${def.label.toLowerCase()}, for example ${shown}.`;
+    setError(problem);
+    if (problem) return;
+    if (value !== current) dispatch({ type: "props", id: part.id, props: patch });
+    setDraft(null);
+  };
+  const id = `${part.id}-${def.key}`;
+  return (
+    <div>
+      <label htmlFor={id} className="block text-[0.8rem] font-semibold text-ink">
+        {def.label} <span className="font-normal text-muted">({def.unit})</span>
+      </label>
+      <input
+        id={id}
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        placeholder={shown}
+        className="mt-1 h-10 w-full bg-surface px-3 text-[0.95rem] font-semibold text-ink placeholder:text-muted focus:outline-2 focus:outline-bolt"
+        value={draft ?? shown}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${id}-error` : undefined}
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => {
+          if (draft !== null) commit(e.target.value);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit(e.currentTarget.value);
+          }
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            setDraft(null);
+            setError(null);
+          }
+        }}
+      />
+      {def.presets && (
+        <div className="mt-1.5 flex flex-wrap gap-1" role="group" aria-label={`${def.label} standard values`}>
+          {def.presets.map((v) => (
+            <button
+              key={v}
+              type="button"
+              className={clsx("px-2 py-1 text-[0.75rem] font-semibold", Math.abs(v - current) < 1e-12 * Math.max(1, Math.abs(v)) ? "bg-ink text-on-ink" : "bg-surface text-ink hover:bg-surface-2")}
+              onClick={() => commit(String(Number((v * scale).toPrecision(12))))}
+            >
+              {Number((v * scale).toPrecision(6))}
+            </button>
+          ))}
+        </div>
+      )}
+      {error && (
+        <p id={`${id}-error`} role="alert" className="mt-1 text-[0.8rem] font-medium text-danger">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function Inspector({ part, st, burnt, voltage, dispatch, onRepair }: { part: Part; st?: PartState; burnt: boolean; voltage?: number; dispatch: Dispatch<Action>; onRepair: () => void }) {
   const def = PART_DEFS[part.type];
   const set = (props: Part["props"]) => dispatch({ type: "props", id: part.id, props });
@@ -246,10 +333,11 @@ export function Inspector({ part, st, burnt, voltage, dispatch, onRepair }: { pa
         </div>
       }
     >
-      <p className="text-[0.8rem] font-semibold text-signal">{def.spec(part.props)}</p>
+      <p className="text-[0.8rem] font-semibold text-bolt">{propertySpec(part)}</p>
       <p className="mt-2 text-[0.875rem] leading-snug text-muted">{def.learn}</p>
       <div className="mt-3 grid gap-3">
-        {def.fields?.map((f) =>
+        {PROPERTY_DEFS[part.type].map((def) => <NumericProperty key={`${part.id}-${def.key}`} part={part} def={def} dispatch={dispatch} />)}
+        {def.fields?.filter((f) => !PROPERTY_DEFS[part.type].some((p) => p.key === f.key) && !(part.type === "led" && f.key === "color")).map((f) =>
           f.kind === "number" ? (
             <NumberField key={`${part.id}-${f.key}-${part.props[f.key] ?? f.fallback}`} f={f} value={(part.props[f.key] as number | undefined) ?? f.fallback} onSet={(v) => set({ [f.key]: v } as PartProps)} field={field} />
           ) : (
@@ -271,8 +359,23 @@ export function Inspector({ part, st, burnt, voltage, dispatch, onRepair }: { pa
             <input type="range" min={0} max={1} step={0.01} value={part.props.pos ?? 0.5} onChange={(e) => dispatch({ type: "props", id: part.id, props: { pos: Number(e.target.value) }, history: false })} className="mt-1 w-full accent-bolt" />
           </label>
         )}
+        {part.type === "button" && <label className="flex items-center gap-2 text-[0.8rem] text-muted">
+          <input type="checkbox" checked={part.props.normallyClosed ?? false} onChange={(e) => set({ normallyClosed: e.target.checked })} /> Normally closed
+        </label>}
+        {part.type === "led" && (
+          <label className="block text-[0.8rem] text-muted">
+            Colour
+            <select className={field} value={part.props.color} onChange={(e) => set({ color: e.target.value as LedColor, forwardVoltage: LED_SPECS[e.target.value as LedColor].vf })}>
+              {(Object.keys(LED_SPECS) as LedColor[]).map((c) => (
+                <option key={c} value={c}>
+                  {LED_SPECS[c].label} · {LED_SPECS[c].vf} V
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {part.type === "switch" && (
-          <button type="button" className={clsx(panelBtn, "bg-surface text-ink hover:bg-surface-2")} onClick={() => dispatch({ type: "props", id: part.id, props: { closed: !part.props.closed }, history: false })}>
+          <button type="button" className={clsx(panelBtn, "bg-surface text-ink hover:bg-surface-2")} onClick={() => dispatch({ type: "props", id: part.id, props: { closed: !part.props.closed }, history: true })}>
             Switch {part.props.closed ? "off" : "on"}
           </button>
         )}
@@ -282,6 +385,7 @@ export function Inspector({ part, st, burnt, voltage, dispatch, onRepair }: { pa
           </button>
         )}
       </div>
+      {part.type === "buzzer" && <p role="status" className="mt-3 text-[0.875rem] font-semibold text-ink">{st?.on && !st.burnt ? "Sounding · circuit sound may be muted" : "Buzzer silent"}</p>}
       {st && (
         <dl className="mt-3 grid grid-cols-2 gap-1.5">
           <Reading label="Current" value={fmtA(st.current)} />
@@ -369,7 +473,7 @@ export function MissionList({ state, dispatch, onClose }: { state: LabState; dis
                 </span>
                 <span>
                   <span className="block font-bold">{m.title}</span>
-                  <span className={clsx("block text-[0.875rem]", current ? "text-on-ink-muted" : "text-muted")}>{m.skill}</span>
+                  <span className={clsx("block text-[0.875rem]", current ? "text-muted" : "text-muted")}>{m.skill}</span>
                 </span>
               </button>
             </li>

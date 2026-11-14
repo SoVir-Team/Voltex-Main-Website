@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type PointerEvent 
 import { segmentCurrents, type DrcIssue } from "../engine/drc.ts";
 import { VIA_R, netAt, pointSegDist, type Netlist } from "../engine/netlist.ts";
 import { routeLeg } from "../engine/router.ts";
+import { offsetFragment, placementError } from "../engine/clipboard.ts";
 import { partBox, pinPositions } from "../engine/parts.ts";
 import type { SimSnapshot } from "../engine/solver.ts";
 import type { Board, Part, Pt } from "../engine/types.ts";
@@ -132,6 +133,10 @@ export function BoardCanvas({
     }
     if (e.button === 1 || e.button === 2) {
       drag.current = { kind: "pan", sx: e.clientX, sy: e.clientY, vx: vb.x, vy: vb.y };
+      return;
+    }
+    if (state.pasting) {
+      dispatch({ type: "paste-place", at: p });
       return;
     }
     if (state.placing) {
@@ -290,8 +295,11 @@ export function BoardCanvas({
   const layerColor = (l: "top" | "bottom") => (l === "top" ? skin.top : skin.bottom);
   const activeFirst = state.layer === "top" ? (["bottom", "top"] as const) : (["top", "bottom"] as const);
 
+  const pastePreview = state.pasting && state.clipboard && cursor ? offsetFragment(state.clipboard, cursor) : null;
+  const pasteError = pastePreview ? placementError(board, pastePreview) : null;
+
   const cursorClass =
-    state.placing || state.tool === "trace" || state.tool === "via" ? "cursor-crosshair" : state.tool === "probe" ? "cursor-help" : state.tool === "delete" ? "cursor-not-allowed" : panning ? "cursor-grabbing" : "cursor-default";
+    state.pasting || state.placing || state.tool === "trace" || state.tool === "via" ? "cursor-crosshair" : state.tool === "probe" ? "cursor-help" : state.tool === "delete" ? "cursor-not-allowed" : panning ? "cursor-grabbing" : "cursor-default";
 
   return (
     <svg
@@ -329,7 +337,7 @@ export function BoardCanvas({
           {board.traces
             .filter((t) => t.layer === layer)
             .map((t) => {
-              const sel = state.selection?.kind === "trace" && state.selection.id === t.id;
+              const sel = (state.selection?.kind === "trace" && state.selection.id === t.id) || state.selection?.kind === "all";
               return (
                 <polyline
                   key={t.id}
@@ -347,13 +355,13 @@ export function BoardCanvas({
 
       {board.vias.map((v) => (
         <g key={v.id}>
-          <circle cx={v.x} cy={v.y} r={VIA_R / MM} fill={skin.pad} stroke={state.selection?.id === v.id ? ink : "none"} strokeWidth={0.08} />
+          <circle cx={v.x} cy={v.y} r={VIA_R / MM} fill={skin.pad} stroke={(state.selection?.id === v.id || state.selection?.kind === "all") ? ink : "none"} strokeWidth={0.08} />
           <circle cx={v.x} cy={v.y} r={0.2 / MM} fill={skin.drill} />
         </g>
       ))}
 
       {board.parts.map((p) => (
-        <PartGlyph key={p.id} part={p} st={snap?.parts[p.id]} skin={skin} view={view} selected={state.selection?.kind === "part" && state.selection.id === p.id} hot={hotParts.has(p.id)} />
+        <PartGlyph key={p.id} part={p} st={snap?.parts[p.id]} skin={skin} view={view} selected={(state.selection?.kind === "part" && state.selection.id === p.id) || state.selection?.kind === "all"} hot={hotParts.has(p.id)} />
       ))}
 
       {/* Current flowing in the copper: dash speed follows the current. */}
@@ -450,6 +458,12 @@ export function BoardCanvas({
           </g>
         );
       })}
+      {pastePreview && <g opacity={0.65} pointerEvents="none">
+        {pastePreview.traces.map((t) => <polyline key={t.id} points={t.points.map((p) => `${p.x},${p.y}`).join(" ")} fill="none" stroke={pasteError ? "#ff6b4a" : layerColor(t.layer)} strokeWidth={t.width / MM} />)}
+        {pastePreview.vias.map((v) => <circle key={v.id} cx={v.x} cy={v.y} r={0.3} fill={skin.pad} />)}
+        {pastePreview.parts.map((p) => <PartGlyph key={p.id} part={p} skin={skin} view="design" selected hot={Boolean(pasteError)} />)}
+        {pasteError && <text x={Math.round(cursor!.x)} y={Math.round(cursor!.y) - 1} fontSize={0.65} fill="#ffb4a8">{pasteError}</text>}
+      </g>}
       {focus && <circle cx={focus.x} cy={focus.y} r={1.6} fill="none" stroke="#ff6b4a" strokeWidth={0.15} className="lab-focus" pointerEvents="none" />}
       <title>Student Lab board</title>
     </svg>

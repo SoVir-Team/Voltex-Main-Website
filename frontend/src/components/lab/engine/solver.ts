@@ -1,5 +1,6 @@
+import { LED_BURN_A } from "./parts.ts";
 import { buildNetlist, type Netlist } from "./netlist.ts";
-import { LED_BURN_A, LED_SPECS } from "./parts.ts";
+import { propertyValue as parameter } from "./properties.ts";
 import type { Board, Part } from "./types.ts";
 import { BOARDS, isMcu, usbRail, type McuDrives } from "./mcu-boards.ts";
 
@@ -86,9 +87,9 @@ interface DiodeModel {
 }
 
 const LED_N = 2;
-function ledModel(color: Part["props"]["color"]): DiodeModel {
-  const vf = LED_SPECS[color ?? "red"].vf;
-  return { n: LED_N, is: 0.02 / Math.expm1(vf / (LED_N * VT)) };
+function ledModel(input: Part | Part["props"]["color"]): DiodeModel {
+  const part: Part = typeof input === "object" ? input : { id: "", type: "led", x: 0, y: 0, rot: 0, props: { color: input } };
+  return { n: LED_N, is: parameter(part, "ratedCurrent") / Math.expm1(parameter(part, "forwardVoltage") / (LED_N * VT)) };
 }
 const DIODE: DiodeModel = { is: 2.5e-9, n: 1.75 };
 /** About 0.3 V at 20 mA. */
@@ -105,6 +106,10 @@ const BJT: Record<string, { is: number; bf: number; br: number; imax: number; pm
   BC557: { is: 1e-14, bf: 250, br: 2, imax: 0.1, pmax: 0.5 },
   "2N2907": { is: 1e-14, bf: 150, br: 2, imax: 0.6, pmax: 0.625 },
 };
+function transistorModel(part: Part) {
+  const base = BJT[part.props.variant ?? (part.type === "npn" ? "2N2222" : "BC557")] ?? BJT["2N2222"];
+  return { ...base, bf: part.props.gain ?? base.bf, imax: part.props.ratedCurrent !== undefined ? part.props.ratedCurrent * 4 / 3 : base.imax };
+}
 const MOS: Record<string, { vth: number; k: number; imax: number; pmax: number }> = {
   IRF540: { vth: 3, k: 2, imax: 28, pmax: 2 },
   AO3400: { vth: 1, k: 4, imax: 5.7, pmax: 1.4 },
@@ -132,12 +137,12 @@ export function sourceOf(part: Part): Source | null {
   }
   switch (part.type) {
     case "battery9v": {
-      const v = V ?? 9;
-      return { p: "+", n: "-", rint: 1.7, imax: (0.6 * v) / 1.7, v: () => v };
+      const { v, rint } = batteryOf(part.type, part.props)!;
+      return { p: "+", n: "-", rint, imax: (0.6 * v) / rint, v: () => v };
     }
     case "coincell": {
-      const v = V ?? 3;
-      return { p: "+", n: "-", rint: 30, imax: (0.6 * v) / 30, v: () => v };
+      const { v, rint } = batteryOf(part.type, part.props)!;
+      return { p: "+", n: "-", rint, imax: (0.6 * v) / rint, v: () => v };
     }
     case "dcsource": {
       const v = V ?? 5;
@@ -176,8 +181,23 @@ export function hasSupply(board: Board): boolean {
   return board.parts.some(isSupply) && referencePin(board) !== null;
 }
 
-export function ldrOhms(ambient: number): number {
-  return 10 ** (6 - 3 * Math.max(0, Math.min(1, ambient)));
+function diodeModel(part: Part): DiodeModel {
+  return { n: 1.75, is: parameter(part, "ratedCurrent") / Math.expm1(parameter(part, "forwardVoltage") / (1.75 * VT)) };
+}
+function contactConductance(part: Part, pressed: ReadonlySet<string>): number {
+  const closed = part.type === "button" ? Boolean(part.props.normallyClosed) !== pressed.has(part.id) : Boolean(part.props.closed);
+  return closed ? 1 / parameter(part, "contactResistance") : OPEN;
+}
+
+export function batteryOf(type: Part["type"], props: Part["props"] = {}): { v: number; rint: number } | null {
+  if (type === "battery9v" || type === "coincell") return { v: parameter({ type, props }, "voltage"), rint: parameter({ type, props }, "internalResistance") };
+  return null;
+}
+
+export function ldrOhms(ambient: number, part?: Part): number {
+  const bright = part ? parameter(part, "brightResistance") : 1000;
+  const dark = part ? parameter(part, "darkResistance") : 1e6;
+  return dark * (bright / dark) ** Math.max(0, Math.min(1, ambient));
 }
 
 function pnjlim(vnew: number, vold: number, vt: number, vcrit: number): number {
@@ -432,39 +452,39 @@ export class Simulator {
       if (dead) continue;
       switch (part.type) {
         case "resistor":
-          s.g(P("1"), P("2"), 1 / Math.max(0.1, part.props.value ?? 330));
+          s.g(P("1"), P("2"), 1 / Math.max(0.1, parameter(part, "value")));
           break;
         case "fuse":
           s.g(P("1"), P("2"), 1 / 0.05);
           break;
         case "ldr":
-          s.g(P("1"), P("2"), 1 / ldrOhms(inputs.ambient));
+          s.g(P("1"), P("2"), 1 / ldrOhms(inputs.ambient, part));
           break;
         case "pot": {
-          const R = part.props.value ?? 10000;
-          const pos = part.props.pos ?? 0.5;
+          const R = parameter(part, "value");
+          const pos = parameter(part, "pos");
           s.g(P("1"), P("W"), 1 / Math.max(1, R * pos));
           s.g(P("W"), P("3"), 1 / Math.max(1, R * (1 - pos)));
           break;
         }
         case "button":
-          s.g(P("1"), P("2"), inputs.pressed.has(part.id) ? CLOSED : OPEN);
+          s.g(P("1"), P("2"), contactConductance(part, inputs.pressed));
           break;
         case "switch":
-          s.g(P("1"), P("2"), part.props.closed ? CLOSED : OPEN);
+          s.g(P("1"), P("2"), contactConductance(part, inputs.pressed));
           break;
         case "spdt":
           s.g(P("COM"), P("A"), part.props.closed ? CLOSED : OPEN);
           s.g(P("COM"), P("B"), part.props.closed ? OPEN : CLOSED);
           break;
         case "buzzer":
-          s.g(P("+"), P("-"), 1 / 360);
+          s.g(P("+"), P("-"), 1 / parameter(part, "loadResistance"));
           break;
         case "led":
-          settled = this.diode(s, v, part.id, P("A"), P("K"), ledModel(part.props.color)) && settled;
+          settled = this.diode(s, v, part.id, P("A"), P("K"), ledModel(part)) && settled;
           break;
         case "diode":
-          settled = this.diode(s, v, part.id, P("A"), P("K"), DIODE) && settled;
+          settled = this.diode(s, v, part.id, P("A"), P("K"), diodeModel(part)) && settled;
           break;
         case "schottky":
           settled = this.diode(s, v, part.id, P("A"), P("K"), SCHOTTKY) && settled;
@@ -474,7 +494,7 @@ export class Simulator {
           settled = this.diode(s, v, part.id + ":z", P("K"), P("A"), ZENER, zenerOffset(part.props.value ?? 5.1)) && settled;
           break;
         case "npn":
-          settled = this.bjt(s, v, part.id, P("C"), P("B"), P("E"), 1, BJT[part.props.variant ?? "2N2222"] ?? BJT["2N2222"]) && settled;
+          settled = this.bjt(s, v, part.id, P("C"), P("B"), P("E"), 1, transistorModel(part)) && settled;
           break;
         case "pnp":
           settled = this.bjt(s, v, part.id, P("C"), P("B"), P("E"), -1, BJT[part.props.variant ?? "BC557"] ?? BJT.BC557) && settled;
@@ -489,7 +509,7 @@ export class Simulator {
         case "electrolytic": {
           const a = part.type === "ceramic" ? P("1") : P("+");
           const b = part.type === "ceramic" ? P("2") : P("-");
-          const g = (part.props.value ?? 1e-6) / dt;
+          const g = parameter(part, "value") / dt;
           s.g(a, b, g);
           s.src(b, a, g * (this.capV.get(part.id) ?? 0));
           break;
@@ -664,8 +684,8 @@ export class Simulator {
           const vs = this.V(v, P("8")) - this.V(v, gnd);
           s.g(P("8"), gnd, 1 / 20000);
           const q = this.latch.get(part.id) ?? false;
-          const target = q ? Math.max(0, vs - 1.7) : 0;
-          const gOut = 1 / 15;
+          const target = q ? Math.max(0, vs - parameter(part, "outputDrop")) : 0;
+          const gOut = 1 / parameter(part, "outputResistance");
           s.g(P("3"), gnd, gOut);
           s.src(gnd, P("3"), target * gOut);
           s.g(P("7"), gnd, q ? OPEN : 1 / 10);
@@ -844,8 +864,8 @@ export class Simulator {
             this.resetWarned.add(part.id);
             this.events.push({ type: "reset-floating", partId: part.id });
           }
-        } else if (trig < vs / 3) q = true;
-        else if (thr > (2 * vs) / 3) q = false;
+        } else if (trig < vs * parameter(part, "triggerRatio")) q = true;
+        else if (thr > vs * parameter(part, "thresholdRatio")) q = false;
         this.latch.set(part.id, q);
       }
       const st = snap.parts[part.id];
@@ -966,9 +986,9 @@ export class Simulator {
       }
       switch (part.type) {
         case "resistor": {
-          const R = Math.max(0.1, part.props.value ?? 330);
+          const R = Math.max(0.1, parameter(part, "value"));
           two("1", "2", (V(part, "1") - V(part, "2")) / R);
-          st.stress = st.power / 0.25 / 2;
+          st.stress = st.power / parameter(part, "powerRating") / 2;
           break;
         }
         case "fuse":
@@ -976,27 +996,27 @@ export class Simulator {
           st.stress = Math.abs(st.current) / (part.props.value ?? 0.5);
           break;
         case "ldr":
-          two("1", "2", (V(part, "1") - V(part, "2")) / ldrOhms(inputs.ambient));
+          two("1", "2", (V(part, "1") - V(part, "2")) / ldrOhms(inputs.ambient, part));
           st.stress = st.power / 0.1 / 2;
           break;
         case "pot": {
-          const R = part.props.value ?? 10000;
-          const pos = part.props.pos ?? 0.5;
+          const R = parameter(part, "value");
+          const pos = parameter(part, "pos");
           const i1 = (V(part, "1") - V(part, "W")) / Math.max(1, R * pos);
           const i2 = (V(part, "W") - V(part, "3")) / Math.max(1, R * (1 - pos));
           st.current = Math.max(Math.abs(i1), Math.abs(i2));
           st.pinCurrents = { "1": i1, W: i2 - i1, "3": -i2 };
           st.power = i1 * i1 * R * pos + i2 * i2 * R * (1 - pos);
-          st.stress = st.power / 0.25 / 2;
+          st.stress = st.power / parameter(part, "powerRating") / 2;
           break;
         }
         case "button":
-          two("1", "2", (V(part, "1") - V(part, "2")) * (inputs.pressed.has(part.id) ? CLOSED : OPEN));
-          st.on = inputs.pressed.has(part.id);
+          two("1", "2", (V(part, "1") - V(part, "2")) * contactConductance(part, inputs.pressed));
+          st.on = Boolean(part.props.normallyClosed) !== inputs.pressed.has(part.id);
           st.stress = Math.abs(st.current) / 0.5;
           break;
         case "switch":
-          two("1", "2", (V(part, "1") - V(part, "2")) * (part.props.closed ? CLOSED : OPEN));
+          two("1", "2", (V(part, "1") - V(part, "2")) * contactConductance(part, inputs.pressed));
           st.on = Boolean(part.props.closed);
           st.stress = Math.abs(st.current) / 1;
           break;
@@ -1011,24 +1031,24 @@ export class Simulator {
         }
         case "buzzer": {
           const vd = V(part, "+") - V(part, "-");
-          two("+", "-", vd / 360);
-          st.on = vd > 2.5;
+          two("+", "-", vd / parameter(part, "loadResistance"));
+          st.on = vd > parameter(part, "minVoltage") && vd <= parameter(part, "maxVoltage");
           st.reversed = vd < -1;
-          st.stress = vd / 15;
+          st.stress = Math.abs(vd) / (parameter(part, "maxVoltage") * 1.25);
           break;
         }
         case "led":
         case "diode":
         case "schottky": {
-          const m = part.type === "led" ? ledModel(part.props.color) : part.type === "schottky" ? SCHOTTKY : DIODE;
+          const m = part.type === "led" ? ledModel(part) : part.type === "schottky" ? SCHOTTKY : diodeModel(part);
           const vd = V(part, "A") - V(part, "K");
           const I = m.is * Math.expm1(Math.min(vd / (m.n * VT), 80));
           two("A", "K", I);
           if (part.type === "led") {
-            st.glow = I > 2e-4 && part.props.color !== "ir" ? Math.min(1, (I / 0.02) ** 0.6) : 0;
+            st.glow = I > 2e-4 && part.props.color !== "ir" ? Math.min(1, (I / parameter(part, "ratedCurrent")) ** 0.6) : 0;
             st.on = I > 2e-4;
-            st.stress = I / LED_BURN_A;
-          } else st.stress = I / 1.5;
+            st.stress = I / (parameter(part, "ratedCurrent") * 2.5);
+          } else st.stress = I / (part.type === "diode" ? parameter(part, "ratedCurrent") * 1.5 : 1.5);
           st.reversed = vd < -1;
           break;
         }
@@ -1044,7 +1064,7 @@ export class Simulator {
         case "npn":
         case "pnp": {
           const sg = part.type === "npn" ? 1 : -1;
-          const m = BJT[part.props.variant ?? (sg === 1 ? "2N2222" : "BC557")] ?? BJT["2N2222"];
+          const m = transistorModel(part);
           const vbe = sg * (V(part, "B") - V(part, "E"));
           const vbc = sg * (V(part, "B") - V(part, "C"));
           const iF = m.is * Math.expm1(Math.min(vbe / VT, 80));
@@ -1080,9 +1100,10 @@ export class Simulator {
           const vc = V(part, a) - V(part, b);
           st.current = 0;
           st.pinCurrents = { [a]: 0, [b]: 0 };
+          st.stress = Math.abs(vc) / parameter(part, "voltageRating");
           if (part.type === "electrolytic") {
             st.reversed = vc < -1;
-            st.stress = vc < -1 ? 2 : vc / 25;
+            st.stress = vc < -1 ? 2 : vc / parameter(part, "voltageRating");
           }
           break;
         }
@@ -1290,8 +1311,8 @@ export class Simulator {
           const gnd = V(part, "1");
           const q = this.latch.get(part.id) ?? false;
           const vs = V(part, "8") - gnd;
-          const target = q ? Math.max(0, vs - 1.7) : 0;
-          const iOut = (V(part, "3") - gnd - target) / 15;
+          const target = q ? Math.max(0, vs - parameter(part, "outputDrop")) : 0;
+          const iOut = ((V(part, "3") - gnd) - target) / parameter(part, "outputResistance");
           const iDis = q ? 0 : (V(part, "7") - gnd) / 10;
           const iSup = vs / 20000;
           st.on = q;

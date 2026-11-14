@@ -85,6 +85,25 @@ export interface PartProps {
   /** Multimeter function, a part model (e.g. "BC547"), or 7-segment wiring ("cc" or "ca"). */
   mode?: string;
   variant?: string;
+  voltage?: number;
+  internalResistance?: number;
+  powerRating?: number;
+  voltageRating?: number;
+  forwardVoltage?: number;
+  ratedCurrent?: number;
+  normallyClosed?: boolean;
+  contactResistance?: number;
+  brightResistance?: number;
+  darkResistance?: number;
+  gain?: number;
+  minVoltage?: number;
+  maxVoltage?: number;
+  loadResistance?: number;
+  frequency?: number;
+  triggerRatio?: number;
+  thresholdRatio?: number;
+  outputResistance?: number;
+  outputDrop?: number;
 }
 
 export interface Part {

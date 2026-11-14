@@ -40,4 +40,5 @@ export function parseSI(text: string): number {
 
 export const num = (key: "value" | "freq" | "duty", label: string, unit: string, presets: number[], fallback: number, min: number, max: number): FieldDef => ({ kind: "number", key, label, unit, presets, fallback, min, max });
 export const choice = (key: "color" | "mode" | "variant", label: string, options: [string, string][]): FieldDef => ({ kind: "choice", key, label, options: options.map(([value, l]) => ({ value, label: l })), fallback: options[0][0] });
-export const volts = (p: PartProps, d: number) => formatValue(p.value ?? d, "V");
+/** A source voltage. The inspector edits `voltage`; older boards stored it in `value`. */
+export const volts = (p: PartProps, d: number) => formatValue(p.voltage ?? p.value ?? d, "V");

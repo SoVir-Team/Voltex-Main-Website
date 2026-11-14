@@ -11,7 +11,9 @@ import type { SimEvent } from "../engine/solver.ts";
 import type { Board, PartType, Pt } from "../engine/types.ts";
 import { Mascot } from "../mascot/Mascot.tsx";
 import { LINE_BY_ID, VoicePlayer, type Mood } from "../mascot/voice.ts";
-import { TRACE_WIDTHS, activeMission, loadState, modeKey, reducer, saveState, type Tool } from "../state/store.ts";
+import { TRACE_WIDTHS, activeMission, canUndo, canRedo, loadState, modeKey, reducer, saveState, type Tool } from "../state/store.ts";
+import { propertySpec } from "../engine/properties.ts";
+import { CircuitAudio } from "../state/circuitAudio.ts";
 import { useSimulation } from "../state/useSimulation.ts";
 import { BoardCanvas, type ProbeReading } from "./BoardCanvas.tsx";
 import { DrcPanel, Inspector, MissionList, MissionPanel, Palette, panelBtn } from "./Panels.tsx";
@@ -60,6 +62,8 @@ export default function Lab() {
   const svgRef = useRef<SVGSVGElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const mascotRef = useRef<HTMLDivElement>(null);
+  const [circuitAudio] = useState(() => new CircuitAudio());
+  const [circuitSound, setCircuitSound] = useState(true);
   const [voice] = useState(() => new VoicePlayer());
   const [voiceOn, setVoiceOn] = useState(() => {
     try {
@@ -211,6 +215,11 @@ export default function Lab() {
   );
 
   const sim = useSimulation(state.board, state.powered, state.ambient, pressed, onEvents);
+  useEffect(() => {
+    circuitAudio.update(state.board, state.powered ? sim.snap : null, circuitSound);
+  }, [circuitAudio, state.board, state.powered, sim.snap, circuitSound]);
+  useEffect(() => () => circuitAudio.dispose(), [circuitAudio]);
+
   const { burntIds } = sim;
 
   // ---------- Mission checks and design rules, re-run shortly after each edit ----------
@@ -253,6 +262,7 @@ export default function Lab() {
     return () => window.clearInterval(id);
   }, []);
   const activity = () => {
+    circuitAudio.unlock();
     lastActive.current = performance.now();
     if (sleeping) {
       setSleeping(false);
@@ -402,8 +412,8 @@ export default function Lab() {
     const rows = new Map<string, { refs: string[]; name: string; spec: string }>();
     for (const p of state.board.parts) {
       const def = PART_DEFS[p.type];
-      const key = `${def.name}|${def.spec(p.props)}`;
-      const row = rows.get(key) ?? { refs: [], name: def.name, spec: def.spec(p.props) };
+      const key = `${def.name}|${propertySpec(p)}`;
+      const row = rows.get(key) ?? { refs: [], name: def.name, spec: propertySpec(p) };
       row.refs.push(p.id);
       rows.set(key, row);
     }
@@ -414,7 +424,7 @@ export default function Lab() {
   const onKey = (e: React.KeyboardEvent) => {
     activity();
     const target = e.target as HTMLElement;
-    if (target.closest("input, select, textarea")) return;
+    if (target.closest("input, select, textarea, [contenteditable=true]")) return;
     const k = e.key.toLowerCase();
     const sel = state.selection;
     if ((e.ctrlKey || e.metaKey) && k === "z") {
@@ -425,6 +435,13 @@ export default function Lab() {
     if ((e.ctrlKey || e.metaKey) && k === "y") {
       e.preventDefault();
       dispatch({ type: "redo" });
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && ["a", "c", "v"].includes(k)) {
+      e.preventDefault();
+      if (k === "a") dispatch({ type: "select", selection: { kind: "all", id: "all" } });
+      if (k === "c") dispatch({ type: "copy" });
+      if (k === "v") dispatch({ type: "paste-start" });
       return;
     }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -520,12 +537,18 @@ export default function Lab() {
           </select>
         </label>
         <span className="mx-1 h-6 w-px bg-black/10" aria-hidden />
-        <button type="button" aria-label="Undo (Ctrl+Z)" title="Undo (Ctrl+Z)" disabled={!state.past.length} className={toolBtn(false)} onClick={() => dispatch({ type: "undo" })}>
+        <button type="button" aria-label="Undo (Ctrl+Z)" aria-keyshortcuts="Control+z Meta+z" title={state.routing ? "Undo last wire step (Ctrl/Cmd+Z)" : "Undo last design change (Ctrl/Cmd+Z)"} disabled={!canUndo(state)} className={toolBtn(false)} onClick={() => { dispatch({ type: "undo" }); rootRef.current?.focus({ preventScroll: true }); }}>
           <Undo2 aria-hidden className="h-4.5 w-4.5" />
+          Undo
         </button>
-        <button type="button" aria-label="Redo (Ctrl+Y)" title="Redo (Ctrl+Y)" disabled={!state.future.length} className={toolBtn(false)} onClick={() => dispatch({ type: "redo" })}>
+        <button type="button" aria-label="Redo (Ctrl+Y)" aria-keyshortcuts="Control+y Control+Shift+z Meta+Shift+z" title="Redo (Ctrl/Cmd+Shift+Z or Ctrl+Y)" disabled={!canRedo(state)} className={clsx(panelBtn, "text-on-ink hover:bg-white/10")} onClick={() => { dispatch({ type: "redo" }); rootRef.current?.focus({ preventScroll: true }); }}>
           <Redo2 aria-hidden className="h-4.5 w-4.5" />
+          Redo
         </button>
+        <button type="button" className={clsx(panelBtn, "text-on-ink hover:bg-white/10")} disabled={!state.selection} onClick={() => dispatch({ type: "copy" })} title="Copy (Ctrl/Cmd+C)">Copy</button>
+        <button type="button" className={clsx(panelBtn, "text-on-ink hover:bg-white/10")} disabled={!state.board.parts.length && !state.board.traces.length && !state.board.vias.length} onClick={() => dispatch({ type: "copy", all: true })}>Copy all</button>
+        <button type="button" className={clsx(panelBtn, "text-on-ink hover:bg-white/10")} disabled={!state.clipboard} onClick={() => dispatch({ type: "paste-start" })} title="Paste (Ctrl/Cmd+V)">Paste</button>
+        <button type="button" className={clsx(panelBtn, "text-on-ink hover:bg-white/10")} aria-pressed={circuitSound} onClick={() => setCircuitSound((on) => !on)}>Circuit sound: {circuitSound ? "on" : "off"}</button>
         <button type="button" aria-label="Reset board" title="Reset board" className={toolBtn(false)} onClick={() => dispatch({ type: "reset" })}>
           <RefreshCw aria-hidden className="h-4.5 w-4.5" />
         </button>
@@ -575,6 +598,7 @@ export default function Lab() {
         </div>
       </div>
 
+      {state.clipboardMessage && <p role="status" className="border-b border-white/10 px-4 py-2 text-[0.8rem] text-on-ink-muted">{state.clipboardMessage}</p>}
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div className="order-2 border-black/10 lg:order-1 lg:w-56 lg:border-r">
           <Palette state={state} dispatch={dispatch} allowed={allowed} />
@@ -628,8 +652,8 @@ export default function Lab() {
               <p className="tabular text-[1.5rem] font-extrabold leading-none">{probe.value}</p>
             </div>
           )}
-          {state.placing && <p className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 border border-black/10 bg-ground px-3 py-1.5 text-[0.85rem] font-semibold text-ink">Click the board to place a {PART_DEFS[state.placing].name.toLowerCase()} · Esc to cancel</p>}
-          {state.routing && <p className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 border border-black/10 bg-ground px-3 py-1.5 text-[0.85rem] font-semibold text-ink">Click to bend · finish on a pad · V for a via · Esc to cancel</p>}
+          {state.placing && <p className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 bg-ground px-3 py-1.5 text-[0.85rem] font-semibold text-ink">Click the board to place a {PART_DEFS[state.placing].name.toLowerCase()} · Esc to cancel</p>}
+          {state.routing && <p className="pointer-events-none absolute left-1/2 top-3 max-w-[calc(100%-1.5rem)] -translate-x-1/2 bg-ground px-3 py-1.5 text-[0.85rem] font-semibold text-ink">Click to bend · finish on a pad · Undo or Ctrl/Cmd+Z to step back · V for a via · Esc to cancel</p>}
           {gateMsg && (
             <p className="pointer-events-none absolute left-1/2 top-14 -translate-x-1/2 bg-danger px-3 py-1.5 text-center text-[0.85rem] font-semibold text-white" role="alert">
               {gateMsg}

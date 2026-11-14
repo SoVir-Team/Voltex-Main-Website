@@ -20,9 +20,18 @@ export const DIVISIONS = [
     short: "Industrial",
     blurb: "Pneumatic valves, cylinders, fittings and automation hardware for the factory floor.",
   },
+  {
+    slug: "home-automation",
+    label: "Home Automation products",
+    short: "Home Automation",
+    blurb: "Smart switches, sensors, controllers and connected devices for the modern home.",
+  },
 ] as const;
 export type Division = (typeof DIVISIONS)[number]["slug"];
 export const DIVISION_SLUGS = DIVISIONS.map((d) => d.slug) as Division[];
+/** URL slugs use hyphens; the database enum uses underscores. */
+export const divisionToDb = (d: Division): string => d.replace(/-/g, "_");
+export const divisionFromDb = (d: string): Division => d.replace(/_/g, "-") as Division;
 export const isDivision = (v: unknown): v is Division => typeof v === "string" && (DIVISION_SLUGS as string[]).includes(v);
 
 export const ORDER_STATUSES = ["pending", "confirmed", "dispatched", "completed", "cancelled"] as const;

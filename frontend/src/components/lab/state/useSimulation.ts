@@ -13,7 +13,7 @@ export function useSimulation(board: Board, powered: boolean, ambient: number, p
   const netlist: Netlist = useMemo(() => buildNetlist(board), [board]);
   const simRef = useRef<Simulator | null>(null);
   const prevBoard = useRef<Board | null>(null);
-  const [snap, setSnap] = useState<SimSnapshot | null>(null);
+  const [frameSnapshot, setSnapshot] = useState<{ board: Board; snapshot: SimSnapshot } | null>(null);
   const inputs = useRef({ ambient, pressed });
   const onEventsRef = useRef(onEvents);
 
@@ -57,7 +57,7 @@ export function useSimulation(board: Board, powered: boolean, ambient: number, p
         } else sim.step(Math.max(real, 0.016), inputs.current);
         const events = sim.drainEvents();
         if (events.length) onEventsRef.current(events);
-        if (frame++ % 2 === 0) setSnap(sim.snapshot(inputs.current));
+        if (frame++ % 2 === 0) setSnapshot({ board: sim.board, snapshot: sim.snapshot(inputs.current) });
       }
       raf = requestAnimationFrame(tick);
     };
@@ -68,5 +68,5 @@ export function useSimulation(board: Board, powered: boolean, ambient: number, p
   const repair = (id: string) => simRef.current?.repair(id);
   const burntIds = useCallback(() => simRef.current?.burntIds() ?? [], []);
   const hasPower = hasSupply(board);
-  return { snap: powered ? snap : null, netlist, repair, hasPower, burntIds };
+  return { snap: powered && frameSnapshot?.board === board ? frameSnapshot.snapshot : null, netlist, repair, hasPower, burntIds };
 }

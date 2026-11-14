@@ -1,4 +1,4 @@
-import { round2, HSN_RE, isDivision, type DiscountType, type Division } from "@voltex/shared";
+import { round2, HSN_RE, isDivision, divisionToDb, type DiscountType, type Division } from "@voltex/shared";
 import { str } from "./http.ts";
 
 export interface ProductFields {
@@ -44,7 +44,7 @@ export function readProductFields(body: Record<string, unknown>, opts: { partial
   if (body.division !== undefined) {
     const d = str(body.division);
     if (!isDivision(d)) errors.push("Choose Electronics, Electrical or Industrial as the product section.");
-    else out.division = d;
+    else out.division = divisionToDb(d) as Division;
   }
 
   const taxRate = toNumber(body.taxRate);
